@@ -91,6 +91,11 @@ def procesar_pdf(file_stream, nombre_pdf):
     filas, tienda_detectada = extraer_tabla(file_stream)
     df = pd.DataFrame(filas, columns=COLUMNAS)
 
+    # 🧾 Guardar Excel en memoria
+    output = BytesIO()
+    df.to_excel(output, index=False, sheet_name="Datos")
+    output.seek(0)
+
     # Reabrimos el archivo en memoria
     wb = load_workbook(output)
     ws = wb["Datos"]
@@ -103,11 +108,6 @@ def procesar_pdf(file_stream, nombre_pdf):
     nuevo_output = BytesIO()
     wb.save(nuevo_output)
     nuevo_output.seek(0)
-
-    # 🧾 Guardar Excel en memoria
-    output = BytesIO()
-    df.to_excel(output, index=False, sheet_name="Datos")
-    output.seek(0)
 
     nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
 
