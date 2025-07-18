@@ -37,43 +37,32 @@ def procesar_pdf(file_stream, nombre_pdf):
     def extraer_tabla(pdf_stream):
         filas_resultado = []
         tienda_detectada = ""
-        dentro_de_tabla = False
-        indices_columnas = {}
 
         with pdfplumber.open(pdf_stream) as pdf:
             for pagina in pdf.pages:
-                texto = pagina.extract_text()
-                if not texto:
+                texto_pagina = pagina.extract_text()
+                if not texto_pagina:
                     continue
-                lineas = texto.split("\n")
+                lineas = texto_pagina.split("\n")
 
                 for linea in lineas:
                     linea = linea.strip()
-                    
-                    # 🏪 Detectar tienda
+
+                    # 1️⃣ Buscar tienda
                     match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
                     if match_tienda:
                         tienda_detectada = match_tienda.group(1)
 
-                    # 🧱 Detectar cabecera de la "tabla"
-                    if not dentro_de_tabla and re.search(r"\bCÓDIGO\b.*\bUDS\.\b.*\bIMPORTE\b", linea.upper()):
-                        headers = linea.upper().split()
-                        for i, col in enumerate(headers):
-                            if col in ["CÓDIGO", "UDS."]:
-                                indices_columnas[col] = i
-                        dentro_de_tabla = True
-                        continue
+                    # 2️⃣ Buscar líneas que empiezan con código
+                    match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
+                    if match_codigo:
+                        codigo = match_codigo.group(1)
 
-                    # 📦 Procesar línea con producto
-                    if dentro_de_tabla:
+                        # 3️⃣ Buscar unidades tipo "6,000" en la línea
                         partes = linea.split()
-                        if len(partes) < max(indices_columnas.values()) + 1:
-                            continue  # Línea incompleta
+                        uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
 
-                        try:
-                            codigo = partes[indices_columnas["CÓDIGO"]]
-                            uds = partes[indices_columnas["UDS."]]
-
+                        if codigo and uds:
                             fila = [
                                 codigo,  # Número de artículo
                                 "",      # Descripción
@@ -81,9 +70,6 @@ def procesar_pdf(file_stream, nombre_pdf):
                                 "", "", "", "", "", "", "", ""  # Vacíos
                             ]
                             filas_resultado.append(fila)
-                        except Exception as e:
-                            print(f"❌ Error al procesar línea: {linea} -> {e}")
-                            continue
 
         return filas_resultado, tienda_detectada
 
@@ -101,8 +87,9 @@ def procesar_pdf(file_stream, nombre_pdf):
     ws = wb["Datos"]
 
     # Escribimos el resumen en una celda fuera de la tabla
+    ultima_fila = ws.max_row
     resumen_texto = f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}"
-    ws["B2"] = resumen_texto
+    ws.cell(row=ultima_fila + 2, column=1).value = resumen_texto
 
     # Guardamos los cambios en un nuevo BytesIO
     nuevo_output = BytesIO()
