@@ -10,6 +10,12 @@ WORKDIR /app
 # Copia todos los archivos del proyecto al contenedor
 COPY . /app
 
+# Instalar dependencias del sistema, incluyendo curl
+RUN apt-get update && apt-get install -y curl && apt-get clean
+ 
+# Dar permisos de ejecución al script ping.sh
+RUN chmod +x ping.sh
+
 # Instala las dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
