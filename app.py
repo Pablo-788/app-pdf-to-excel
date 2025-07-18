@@ -29,11 +29,6 @@ if pdf_file:
             st.error(f"Ocurrió un error al procesar el PDF: {e}")
 
 
-def cron_loop():
-    while True:
-        print("Ejecutando petición...")
-        subprocess.call(["/bin/bash", "/app/ping.sh"])
-        time.sleep(600)  # 10 minutos
- 
-# Lanzar hilo del cron
-threading.Thread(target=cron_loop, daemon=True).start()
+
+print("Ejecutando petición...")
+subprocess.call(["/bin/bash", "/app/ping.sh"])
