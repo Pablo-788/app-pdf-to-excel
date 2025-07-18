@@ -64,10 +64,17 @@ def procesar_pdf(file_stream, nombre_pdf):
 
                         if codigo and uds:
                             fila = [
-                                codigo,  # Número de artículo
-                                "",      # Descripción
-                                uds,     # Cantidad
-                                "", "", "", "", "", "", "", ""  # Vacíos
+                                codigo,      # Número de artículo
+                                "",          # Descripción
+                                uds,         # Cantidad
+                                "",          # Precio por unidad
+                                "",          # % de descuento
+                                "",          # Precio después del descuento
+                                "",          # Indicador de impuestos
+                                "",          # Total (ML)
+                                "001",       # Unidad de negocio
+                                "",          # Código de unidad de medida
+                                "985"        # Precio de coste Departamento
                             ]
                             filas_resultado.append(fila)
 
