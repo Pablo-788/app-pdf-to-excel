@@ -15,7 +15,7 @@ CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 TENANT_ID = os.environ.get("TENANT_ID")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 
-AUTHORITY = f"https://login.microsoftonline.com/72ab3d9f-2e5d-436e-b1ad-97bc92c27295/oauth2/v2.0"
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0"
 SCOPE = "User.Read"
 
 def get_auth_url():
