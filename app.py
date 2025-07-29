@@ -14,6 +14,7 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 TENANT_ID = os.environ.get("TENANT_ID")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
+SCOPE = "openid offline_access https://graph.microsoft.com/User.Read"
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0"
 SCOPE = "User.Read"
