@@ -32,7 +32,7 @@ def get_auth_url():
 
 # --- LOGIN ---
 
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 
 if "code" not in query_params:
     st.title("Iniciar sesión")
