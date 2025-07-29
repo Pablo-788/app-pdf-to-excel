@@ -30,42 +30,55 @@ def get_auth_url():
     url = f"{AUTHORITY}/authorize?{urlencode(params)}"
     return url
 
-# --- LOGIN ---
+# --- MANEJO DE LOGIN OAUTH ---
 
 query_params = st.query_params
 
-if "code" not in query_params:
-    st.title("Iniciar sesión")
-    auth_url = get_auth_url()
-    st.markdown(f"[Inicia sesión con Microsoft 365]({auth_url})")
-    st.stop()  # No mostrar nada más hasta que se inicie sesión
+# 1. Si ya tenemos token guardado, no hacemos nada
+if "access_token" not in st.session_state:
 
-# --- CALLBACK ---
+    # 2. Si viene un ?code en la URL (Microsoft nos redirigió)
+    if "code" in query_params:
+        code = query_params["code"][0]
 
-else:
-    code = query_params["code"][0]
+        token_url = f"{AUTHORITY}/token"
+        data = {
+            "client_id": CLIENT_ID,
+            "scope": SCOPE,
+            "code": code,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+            "client_secret": CLIENT_SECRET
+        }
 
-    token_url = f"{AUTHORITY}/token"
-    data = {
-        "client_id": CLIENT_ID,
-        "scope": SCOPE,
-        "code": code,
-        "redirect_uri": REDIRECT_URI,
-        "grant_type": "authorization_code",
-        "client_secret": CLIENT_SECRET
-    }
-    response = requests.post(token_url, data=data)
-    tokens = response.json()
+        response = requests.post(token_url, data=data)
+        tokens = response.json()
 
-    if "access_token" not in tokens:
-        st.error("Error obteniendo token:")
-        st.write(tokens)
+        if "access_token" not in tokens:
+            st.error("Error al obtener el token de acceso:")
+            st.write(tokens)
+            st.stop()
+
+        st.session_state["access_token"] = tokens["access_token"]
+        st.session_state["logged_in"] = True
+
+        # Limpia la URL de ?code y recarga la app
+        st.query_params.clear()
+        st.experimental_rerun()
+
+    else:
+        # 3. No hay sesión ni código => mostrar botón de login
+        st.title("Iniciar sesión")
+        auth_url = get_auth_url()
+        st.markdown(f"[Inicia sesión con Microsoft 365]({auth_url})")
         st.stop()
 
-    access_token = tokens["access_token"]
-
-    st.success("¡Login correcto!")
-    st.write(f"Token de acceso: {access_token[:40]}...")
+# Botón para cerrar sesión
+with st.sidebar:
+    st.markdown("### Opciones")
+    if st.button("🔒 Cerrar sesión"):
+        st.session_state.clear()
+        st.experimental_rerun()
 
 
 st.title("Convertidor de PDF a Excel")
@@ -93,7 +106,7 @@ if pdf_file:
 def cron_loop():
     while True:
         print("Ejecutando petición...")
-        subprocess.call(["/bin/bash", "/app/ping.sh"])
+        subprocess.call(["/bin/bash", "ping.sh"])
         time.sleep(600)  # 10 minutos
  
 # Lanzar hilo del cron
