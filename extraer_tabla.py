@@ -6,7 +6,7 @@ import re
 from openpyxl import load_workbook
 
 # 📋 Columnas de salida
-COLUMNAS = ["Número de artículo",             # Relleno
+COLUMNAS = ["Número de artículo",    # Relleno
     "Descripción de artículo",       # Vacío
     "Cantidad",                      # Relleno
     "Precio por unidad",             # Vacío
