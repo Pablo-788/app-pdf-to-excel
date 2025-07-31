@@ -2,3 +2,5 @@ streamlit
 pdfplumber
 pandas
 openpyxl
+msal
+python-dotenv
