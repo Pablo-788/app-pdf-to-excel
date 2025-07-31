@@ -15,7 +15,7 @@ load_dotenv()
 CLIENT_ID  = os.getenv("CLIENT_ID",  "your-client-id")   # mismo efecto que .get()
 TENANT_ID  = os.getenv("TENANT_ID",  "your-tenant-id")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "http://localhost:8501/"            # URI registrada en Mobile & desktop
+REDIRECT_URI = "https://app-pdf-to-excel.onrender.com/"            # URI registrada en Mobile & desktop
 SCOPES       = ["User.Read"]
 
 # Crear instancia MSAL una sola vez
