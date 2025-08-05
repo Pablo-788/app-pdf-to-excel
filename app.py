@@ -17,6 +17,7 @@ TENANT_ID  = os.getenv("TENANT_ID",  "your-tenant-id")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_URI = "https://app-pdf-to-excel.onrender.com/"            # URI registrada en Mobile & desktop
 SCOPES       = ["User.Read"]
+ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
 # Crear instancia MSAL una sola vez
 if "msal_app" not in st.session_state:
@@ -64,9 +65,17 @@ def procesar_callback() -> bool:
     )
 
     if "access_token" in result:
-        # Guardar datos en la sesión
+        user_claims = result.get("id_token_claims", {})
+        user_groups = user_claims.get("groups") or []
+
+        if ALLOWED_GROUP_ID not in user_groups:
+            st.error("❌ No tienes permisos para acceder a esta aplicación.")
+            return True  # Detiene el flujo y evita mostrar la app
+
+        # Si está en el grupo permitido, guarda sesión
         st.session_state.access_token = result["access_token"]
-        st.session_state.user_info    = result.get("id_token_claims", {})
+        st.session_state.user_info    = user_claims
+
         # --- cerrar la pestaña (si es hija) ---
         components.html(
             """
