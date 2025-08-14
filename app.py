@@ -155,7 +155,7 @@ def inject_styles():
     }}
 
     .recuadro-login {{
-        background-color: #bc9a5f;  /* fondo negro */
+        background-color: #bc9a5f;  /* fondo */
         border-radius: 16px;     /* bordes redondeados */
         padding: 40px;            /* espacio interno */
         max-width: 500px;         /* ancho máximo */
@@ -322,7 +322,7 @@ def mostrar_login():
 
     render_login_navbar()
 
-    st.markdown('<div class="recuadro-login">', unsafe_allow_html=True)
+    st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
     st.title("🔐 Iniciar Sesión")
     st.markdown("### Convertidor pedidos ET\nInicia sesión con tu cuenta de Microsoft para continuar.")
 
@@ -352,6 +352,7 @@ def mostrar_aplicacion():
             try:
                 output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name)
 
+                output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
                 bytes_data = output_excel.getvalue()  # guardamos el contenido en memoria
                 output_excel.close()    
 
@@ -375,7 +376,6 @@ def mostrar_aplicacion():
 
                 # Vista previa de la tabla contenida en el Excel
             if bytes_data:
-                bytes_data.seek(0)  # Asegurarse de que el puntero esté al inicio
                 try:
                     df_preview = pd.read_excel(bytes_data)
                     st.markdown('<div class="center-preview">', unsafe_allow_html=True)
