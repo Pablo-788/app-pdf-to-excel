@@ -154,6 +154,16 @@ def inject_styles():
         width:100%;
     }}
 
+    .recuadro-login {{
+        background-color: #bc9a5f;  /* fondo negro */
+        border-radius: 16px;     /* bordes redondeados */
+        padding: 40px;            /* espacio interno */
+        max-width: 500px;         /* ancho máximo */
+        margin: 50px auto;        /* centrado horizontal y algo de margen arriba */
+        text-align: center;       /* centrado de textos y botones */
+        color: #fff;              /* texto blanco */
+    }}
+
     /* ======= BOTONES ======= */
     .stButton > button,
     .stDownloadButton > button {{
@@ -175,9 +185,26 @@ def inject_styles():
 
 def render_header():
     inject_styles()
+
+    # Agregamos estilos para animaciones suaves
+    st.markdown(f"""
+    <style>
+    /* Animación para desplegables */
+    .menu-panel {{
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 0.3s ease, opacity 0.3s ease;
+    }}
+    .menu-panel.open {{
+        max-height: 500px; /* suficiente para que quepa el contenido */
+        opacity: 1;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
     # Cargar logo en base64 (si no existe, no muestra imagen)
     logo_b64 = cargar_logo_base64()
-
     info = st.session_state.get("user_info", {})
     name  = info.get("name", "Usuario")
     email = info.get("preferred_username", "usuario@example.com")
@@ -207,30 +234,42 @@ def render_header():
     </div>
 
     <script>
-    // Toggle de menús
-    const userBtn = document.getElementById('userBtn');
-    const userPanel = document.getElementById('userPanel');
-    const profileBtn = document.getElementById('profileBtn');
-    const profilePanel = document.getElementById('profilePanel');
+    document.addEventListener("DOMContentLoaded", function() {{
+        const userBtn = document.getElementById('userBtn');
+        const userPanel = document.getElementById('userPanel');
+        const profileBtn = document.getElementById('profileBtn');
+        const profilePanel = document.getElementById('profilePanel');
 
-    function toggle(el) {{ if(!el) return; el.style.display = (el.style.display === 'block') ? 'none' : 'block'; }}
-    if (userBtn) userBtn.onclick = (e) => {{ e.stopPropagation(); toggle(userPanel); if(profilePanel) profilePanel.style.display='none'; }};
-    if (profileBtn) profileBtn.onclick = (e) => {{ e.stopPropagation(); toggle(profilePanel); if(userPanel) userPanel.style.display='none'; }};
+        function toggle(panel) {{
+            if (!panel) return;
+            panel.classList.toggle('open');
+        }}
 
-    document.addEventListener('click', function(e){{
-        if (userPanel) userPanel.style.display = 'none';
-        if (profilePanel) profilePanel.style.display = 'none';
-    }});
-
-    // Logout: añade ?logout=1 y recarga
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {{
-        logoutBtn.onclick = function() {{
-            const url = new URL(window.location.href);
-            url.searchParams.set('logout', '1');
-            window.location.href = url.toString();
+        if (userBtn) userBtn.onclick = (e) => {{
+            e.stopPropagation();
+            toggle(userPanel);
+            if (profilePanel) profilePanel.classList.remove('open');
         }};
-    }}
+        if (profileBtn) profileBtn.onclick = (e) => {{
+            e.stopPropagation();
+            toggle(profilePanel);
+            if (userPanel) userPanel.classList.remove('open');
+        }};
+
+        document.addEventListener('click', function() {{
+            if (userPanel) userPanel.classList.remove('open');
+            if (profilePanel) profilePanel.classList.remove('open');
+        }});
+
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {{
+            logoutBtn.onclick = function() {{
+                const url = new URL(window.location.href);
+                url.searchParams.set('logout', '1');
+                window.location.href = url.toString();
+            }};
+        }}
+    }});
     </script>
     """, unsafe_allow_html=True)
 
@@ -256,7 +295,7 @@ def render_login_navbar():
         padding:10px 24px;
         border-bottom:1px solid #ccc;
     ">
-        {f'<img src="data:image/png;base64,{logo_b64}" alt="logo" style="height:40px;" />' if logo_b64 else ''}
+        {f'<img src="data:image/png;base64,{logo_b64}" alt="Sabor a España" style="height:40px;" />' if logo_b64 else ''}
         <div style="font-weight:600; color:{BRAND_BLUE_DARK}; font-size:18px;">
             {APP_TITLE}
         </div>
@@ -281,20 +320,9 @@ logging.basicConfig(
 # ---------- Interfaz ----------
 def mostrar_login():
 
-    render_login_navbar()  # Renderiza el navbar de login
+    render_login_navbar()
 
-    # ----- LOGIN -----
-    st.markdown("""
-    <div style="
-        background-color: #bc9a5f;  /* fondo negro */
-        border-radius: 16px;     /* bordes redondeados */
-        padding: 40px;            /* espacio interno */
-        max-width: 500px;         /* ancho máximo */
-        margin: 50px auto;        /* centrado horizontal y algo de margen arriba */
-        text-align: center;       /* centrado de textos y botones */
-        color: #fff;              /* texto blanco */
-    ">
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="recuadro-login">', unsafe_allow_html=True)
     st.title("🔐 Iniciar Sesión")
     st.markdown("### Convertidor pedidos ET\nInicia sesión con tu cuenta de Microsoft para continuar.")
 
@@ -308,7 +336,8 @@ def mostrar_login():
     render_footer()
 
 def mostrar_aplicacion():
-    render_header()  # Renderiza el header con logo y menú
+
+    render_header()  
 
     st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
     pdf_file = st.file_uploader(
@@ -338,25 +367,26 @@ def mostrar_aplicacion():
                 )
                 st.markdown('</div>', unsafe_allow_html=True)
 
+            except Exception as e:
+                st.error("❌ Error al procesar el PDF.")
+                with st.expander("Detalles del error"):
+                    st.code(str(e))
+                logging.exception(f"[{datetime.now()}] Error procesando archivo: {pdf_file.name}")
+
                 # Vista previa de la tabla contenida en el Excel
-                output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
+            if bytes_data:
+                bytes_data.seek(0)  # Asegurarse de que el puntero esté al inicio
                 try:
-                    df_preview = pd.read_excel(output_excel)
+                    df_preview = pd.read_excel(bytes_data)
                     st.markdown('<div class="center-preview">', unsafe_allow_html=True)
                     st.markdown("#### 📋 Vista previa de los datos extraidos")
                     st.dataframe(df_preview, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)       
                 except Exception as e:
-                    st.warning("⚠️ No se pudo mostrar la vista previa del Excel.")
+                    st.warning("⚠️ No se pudo mostrar la vista previa de los datos.")
                     logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
 
-            except Exception as e:
-                st.error("❌ Error al procesar la factura.")
-                with st.expander("Detalles del error"):
-                    st.code(str(e))
-                logging.exception(f"[{datetime.now()}] Error procesando archivo: {pdf_file.name}")
-
-    render_footer() # Renderiza el footer
+    render_footer()
 
 # ---------- Cron opcional ----------
 def iniciar_cron():

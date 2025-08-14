@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import re
 from openpyxl import load_workbook
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
 # 📋 Columnas de salida
 COLUMNAS = ["Número de artículo",    # Relleno
@@ -89,8 +90,34 @@ def procesar_pdf(file_stream, nombre_pdf):
     df.to_excel(output, index=False, sheet_name="Datos")
     output.seek(0)
 
+    wb_tabla = load_workbook(output)
+    ws_tabla = wb_tabla["Datos"]
+
+    # Definir rango de la tabla
+    ultima_fila = ws_tabla.max_row
+    ultima_columna = ws_tabla.max_column
+    letra_ultima_columna = ws_tabla.cell(row=1, column=ultima_columna).column_letter
+    rango_tabla = f"A1:{letra_ultima_columna}{ultima_fila}"
+
+    tabla = Table(displayName="TablaDatos", ref=rango_tabla)
+    estilo = TableStyleInfo(
+        name="TableStyleMedium9",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False
+    )
+    tabla.tableStyleInfo = estilo
+    ws_tabla.add_table(tabla)
+
+    # Guardamos el Excel con tabla en memoria
+    output_tabla = BytesIO()
+    wb_tabla.save(output_tabla)
+    output_tabla.seek(0)
+
+    '''
     # Reabrimos el archivo en memoria
-    wb = load_workbook(output)
+    wb = load_workbook(output_tabla)
     ws = wb["Datos"]
 
     # Escribimos el resumen en una celda fuera de la tabla
@@ -102,7 +129,8 @@ def procesar_pdf(file_stream, nombre_pdf):
     nuevo_output = BytesIO()
     wb.save(nuevo_output)
     nuevo_output.seek(0)
+    '''
 
     nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
 
-    return nuevo_output, nombre_final
+    return output_tabla, nombre_final
