@@ -4,7 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import msal
 
-CLIENT_ID  = os.getenv("CLIENT_ID",  "your-client-id")   # mismo efecto que .get()
+CLIENT_ID  = os.getenv("CLIENT_ID",  "your-client-id")
 TENANT_ID  = os.getenv("TENANT_ID",  "your-tenant-id")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_URI = "https://pedidos-et-saetech.onrender.com/"            # URI registrada en Mobile & desktop
@@ -91,7 +91,7 @@ def procesar_callback() -> bool:
     return False
 
 def cerrar_sesion():
-    st.st.experimental_set_query_params()
+    st.query_params = {}
     for k in ("access_token", "user_info"):
         st.session_state.pop(k, None)
     st.rerun()

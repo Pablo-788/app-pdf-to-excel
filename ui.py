@@ -148,7 +148,7 @@ def render_header():
             # ---------- Menú perfil ----------
             with st.popover("👤", use_container_width=True):
                 if st.button("Cerrar sesión"):
-                    st.experimental_set_query_params(logout="1")
+                    st.query_params = {"logout": ["1"]}
                     st.rerun()
 
                 st.markdown(f"""
