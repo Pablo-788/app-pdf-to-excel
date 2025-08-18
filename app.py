@@ -155,13 +155,23 @@ def inject_styles():
     }}
 
     .recuadro-login {{
-        background-color: #bc9a5f;  /* fondo */
-        border-radius: 16px;     /* bordes redondeados */
-        padding: 40px;            /* espacio interno */
-        max-width: 500px;         /* ancho máximo */
-        margin: 50px auto;        /* centrado horizontal y algo de margen arriba */
-        text-align: center;       /* centrado de textos y botones */
-        color: #fff;              /* texto blanco */
+        background-color: #bc9a5f;
+        border-radius: 16px;
+        padding: 40px;
+        max-width: 500px;
+        margin: 50px auto;
+        text-align: center;
+        color: #fff;
+    }}
+
+    .recuadro-login h1 {{
+        font-size: 32px;
+        margin-bottom: 16px;
+    }}
+
+    .recuadro-login h3 {{
+        font-size: 20px;
+        margin-bottom: 24px;
     }}
 
     /* ======= BOTONES ======= */
@@ -176,32 +186,21 @@ def inject_styles():
     }}
 
     /* ======= FOOTER ======= */
-    .footer {{ text-align:center; margin:48px 0 16px; color:#111; }}
-    .footer .brand {{ color:{PRIMARY_COLOR}; font-weight:700; }}
+    .footer {{ text-align:center !important; margin:48px 0 16px !important; color:#111 !important; }}
+    .footer .brand {{ color:{PRIMARY_COLOR} !important; font-weight:700 !important; }}
     
     </style>
     """, unsafe_allow_html=True)
 
+def cargar_logo_base64(ruta_logo: str = LOGO_PATH) -> str:
+    """Carga el logo desde archivo y devuelve su contenido en base64. Si falla, devuelve cadena vacía."""
+    try:
+        with open(ruta_logo, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except FileNotFoundError:
+        return ""
 
 def render_header():
-    inject_styles()
-
-    # Agregamos estilos para animaciones suaves
-    st.markdown(f"""
-    <style>
-    /* Animación para desplegables */
-    .menu-panel {{
-        overflow: hidden;
-        max-height: 0;
-        opacity: 0;
-        transition: max-height 0.3s ease, opacity 0.3s ease;
-    }}
-    .menu-panel.open {{
-        max-height: 500px; /* suficiente para que quepa el contenido */
-        opacity: 1;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
 
     # Cargar logo en base64 (si no existe, no muestra imagen)
     logo_b64 = cargar_logo_base64()
@@ -209,69 +208,36 @@ def render_header():
     name  = info.get("name", "Usuario")
     email = info.get("preferred_username", "usuario@example.com")
 
+    # Navbar principal (HTML + CSS)
     st.markdown(f"""
     <div class="navbar">
         <div class="navbar-left">
             {f'<img src="data:image/png;base64,{logo_b64}" alt="logo" />' if logo_b64 else ''}
             <div class="navbar-title">{APP_TITLE}</div>
         </div>
-        <div class="navbar-right">
-            <div class="menu">
-                <button class="menu-btn" id="userBtn">{name}</button>
-                <div class="menu-panel" id="userPanel">
-                    <p><b>Nombre:</b> {name}</p>
-                    <p><b>Email:</b> {email}</p>
-                </div>
-            </div>
-            <div class="menu">
-                <button class="menu-btn" id="profileBtn">👤</button>
-                <div class="menu-panel" id="profilePanel">
-                    <button class="logout-btn" id="logoutBtn">Cerrar sesión</button>
-                    <p style="margin-top:8px; font-size:12px; opacity:.7;">Versión: {APP_VERSION}</p>
-                </div>
-            </div>
+        <div class="navbar-right" style="gap:12px;">
+            <!-- Aquí se insertarán los menús desplegables con Streamlit -->
         </div>
     </div>
-
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {{
-        const userBtn = document.getElementById('userBtn');
-        const userPanel = document.getElementById('userPanel');
-        const profileBtn = document.getElementById('profileBtn');
-        const profilePanel = document.getElementById('profilePanel');
-
-        function toggle(panel) {{
-            if (!panel) return;
-            panel.classList.toggle('open');
-        }}
-
-        if (userBtn) userBtn.onclick = (e) => {{
-            e.stopPropagation();
-            toggle(userPanel);
-            if (profilePanel) profilePanel.classList.remove('open');
-        }};
-        if (profileBtn) profileBtn.onclick = (e) => {{
-            e.stopPropagation();
-            toggle(profilePanel);
-            if (userPanel) userPanel.classList.remove('open');
-        }};
-
-        document.addEventListener('click', function() {{
-            if (userPanel) userPanel.classList.remove('open');
-            if (profilePanel) profilePanel.classList.remove('open');
-        }});
-
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {{
-            logoutBtn.onclick = function() {{
-                const url = new URL(window.location.href);
-                url.searchParams.set('logout', '1');
-                window.location.href = url.toString();
-            }};
-        }}
-    }});
-    </script>
     """, unsafe_allow_html=True)
+
+    # --- Menú usuario ---
+    with st.expander(label=name, expanded=False):
+        st.markdown(f"""
+            <p><b>Nombre:</b> {name}</p>
+            <p><b>Email:</b> {email}</p>
+        """, unsafe_allow_html=True)
+
+    # --- Menú perfil ---
+    with st.expander(label="👤", expanded=False):
+        if st.button("Cerrar sesión"):
+            url = st.experimental_get_query_params()
+            url["logout"] = "1"
+            st.experimental_set_query_params(**url)
+            st.experimental_rerun()
+        st.markdown(f"""
+            <p style="margin-top:8px; font-size:12px; opacity:.7;">Versión: {APP_VERSION}</p>
+        """, unsafe_allow_html=True)
 
 
 def render_footer():
@@ -302,14 +268,6 @@ def render_login_navbar():
     </div>
     """, unsafe_allow_html=True)
 
-def cargar_logo_base64(ruta_logo: str = LOGO_PATH) -> str:
-    """Carga el logo desde archivo y devuelve su contenido en base64. Si falla, devuelve cadena vacía."""
-    try:
-        with open(ruta_logo, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    except FileNotFoundError:
-        return ""
-
 # Configuración básica de logs
 logging.basicConfig(
     filename="procesar_facturas.log",  # Archivo donde se guardan los logs
@@ -322,16 +280,23 @@ def mostrar_login():
 
     render_login_navbar()
 
-    st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
-    st.title("🔐 Iniciar Sesión")
-    st.markdown("### Convertidor pedidos ET\nInicia sesión con tu cuenta de Microsoft para continuar.")
+    with st.container():
+        st.markdown(f"""
+        <div class="recuadro-login">
+            <h1 style="margin-bottom:16px;">🔐 Iniciar Sesión</h1>
+            <h3 style="margin-bottom:12px;">Convertidor pedidos ET</h3>
+            <p style="margin-bottom:24px;">Inicia sesión con tu cuenta de Microsoft para continuar.</p>
 
-    if st.button("🚀 Iniciar sesión", type="primary"):
-        auth_url = iniciar_autenticacion()
-        abrir_en_nueva_pestana(auth_url)
-        st.info("Se abrió una pestaña. Habilita las pestañas emergentes para esta pantalla si no se abre automáticamente.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            <div style="display:flex; justify-content:center;">
+        """, unsafe_allow_html=True)
+
+        # Botón de Streamlit que mantiene el estilo global de .stButton
+        if st.button("🚀 Iniciar sesión", type="primary"):
+            auth_url = iniciar_autenticacion()
+            abrir_en_nueva_pestana(auth_url)
+            st.info("Se abrió una pestaña. Habilita las pestañas emergentes para esta pantalla si no se abre automáticamente.")
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
     render_footer()
 
