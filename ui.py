@@ -23,7 +23,7 @@ def inject_styles():
     .navbar-left {{ display:flex; align-items:center; gap:12px; }}
     .navbar-left img {{ height:40px; }}
     .navbar-title {{ font-weight:600; color:{BRAND_BLUE_DARK}; font-size:18px; }}
-    .navbar-right {{ display:flex; align-items:center; gap:12px; }}
+    .navbar-right {{ display:flex; align-items:center; gap:12px;justify-content: flex-end;}}
 
     .menu {{ position:relative; }}
     .menu-btn {{ background:transparent; border:none; cursor:pointer; 
@@ -84,6 +84,8 @@ def inject_styles():
         border-radius: 8px !important;
         padding: 10px 16px !important;
         font-size: 16px !important;
+        display: flex;
+        justify-content: center;
     }}
 
     /* ======= FOOTER ======= */
@@ -109,40 +111,53 @@ def render_header():
     name  = info.get("name", "Usuario")
     email = info.get("preferred_username", "usuario@example.com")
 
-    # Navbar principal (HTML + CSS)
     st.markdown(f"""
-    <div class="navbar">
-        <div class="navbar-left">
-            {f'<img src="data:image/png;base64,{logo_b64}" alt="logo" />' if logo_b64 else ''}
-            <div class="navbar-title">{APP_TITLE}</div>
-        </div>
-        <div class="navbar-right" style="gap:12px;">
-            <!-- Aquí se insertarán los menús desplegables con Streamlit -->
-        </div>
-    </div>
+    <style>
+        /* Contenedor general del header */
+        .navbar-container {{
+            background: {BRAND_BLUE_LIGHT};
+            padding: 10px 24px;
+            border-radius: 0;
+        }}
+    </style>
     """, unsafe_allow_html=True)
 
-    # ---------- Menú usuario ----------
-    with st.popover(name):   
-        st.markdown(f"""
-            <p><b>Nombre:</b> {name}</p>
-            <p><b>Email:</b> {email}</p>
-        """, unsafe_allow_html=True)
+    # --- Usamos columnas para maquetar ---
+    with st.container():
+        col1, col2 = st.columns([6, 2])  # proporción izquierda/derecha
+        with col1:
+            st.markdown(
+                f"""
+                <div class="navbar-container navbar-left">
+                    {f'<img src="data:image/png;base64,{logo_b64}" alt="logo" />' if logo_b64 else ''}
+                    <span class="navbar-title">{APP_TITLE}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col2:
+            st.markdown('<div class="navbar-container navbar-right">', unsafe_allow_html=True)
 
-    # ---------- Menú perfil ----------
-    with st.popover("👤"):
-        if st.button("Cerrar sesión"):
-            url = st.experimental_get_query_params()
-            url["logout"] = "1"
-            st.experimental_set_query_params(**url)
-            st.experimental_rerun()
+            # ---------- Menú usuario ----------
+            with st.popover(name, use_container_width=True):
+                st.markdown(f"""
+                    <p><b>Nombre:</b> {name}</p>
+                    <p><b>Email:</b> {email}</p>
+                """, unsafe_allow_html=True)
 
-        st.markdown(f"""
-            <p style="margin-top:8px; font-size:12px; opacity:.7;">
-                Versión: {APP_VERSION}
-            </p>
-        """, unsafe_allow_html=True)
+            # ---------- Menú perfil ----------
+            with st.popover("👤", use_container_width=True):
+                if st.button("Cerrar sesión"):
+                    st.experimental_set_query_params(logout="1")
+                    st.rerun()
 
+                st.markdown(f"""
+                    <p style="margin-top:8px; font-size:12px; opacity:.7;">
+                        Versión: {APP_VERSION}
+                    </p>
+                """, unsafe_allow_html=True)
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
 def render_footer():
     inject_styles()

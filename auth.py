@@ -91,7 +91,7 @@ def procesar_callback() -> bool:
     return False
 
 def cerrar_sesion():
-    st.query_params.clear()
+    st.st.experimental_set_query_params()
     for k in ("access_token", "user_info"):
         st.session_state.pop(k, None)
     st.rerun()
