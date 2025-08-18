@@ -7,7 +7,7 @@ import msal
 CLIENT_ID  = os.getenv("CLIENT_ID",  "your-client-id")   # mismo efecto que .get()
 TENANT_ID  = os.getenv("TENANT_ID",  "your-tenant-id")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "https://app-pdf-to-excel.onrender.com/"            # URI registrada en Mobile & desktop
+REDIRECT_URI = "https://pedidos-et-saetech.onrender.com/"            # URI registrada en Mobile & desktop
 SCOPES       = ["User.Read"]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
