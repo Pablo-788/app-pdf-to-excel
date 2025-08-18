@@ -6,14 +6,12 @@ from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
 
-APP_TITLE   = "Convertidor Pedidos ET → Excel"    # cambia el texto cuando quieras
+APP_TITLE   = "Convertidor Pedidos ET → Excel"
 APP_VERSION = "0.3.16"
 
-PRIMARY_COLOR     = "#0d6efd"   # azul principal (botones)
-BRAND_BLUE_LIGHT  = "#E6F0FA"   # fondo barra superior
-BRAND_BLUE_DARK   = "#003366"   # texto barra superior
-
-# Coloca tu logo en el repositorio y apunta aquí:
+PRIMARY_COLOR     = "#0d6efd"
+BRAND_BLUE_LIGHT  = "#E6F0FA"
+BRAND_BLUE_DARK   = "#003366"
 LOGO_PATH = "LOGO_SAE.png"
 
 def inject_styles():
@@ -104,9 +102,8 @@ def cargar_logo_base64(ruta_logo: str = LOGO_PATH) -> str:
         return ""
 
 def render_header():
-    inject_styles()  # Inyectar estilos CSS
+    inject_styles()
 
-    # Cargar logo en base64 (si no existe, no muestra imagen)
     logo_b64 = cargar_logo_base64()
     info = st.session_state.get("user_info", {})
     name  = info.get("name", "Usuario")
@@ -125,14 +122,14 @@ def render_header():
     </div>
     """, unsafe_allow_html=True)
 
-    # --- Menú usuario ---
+    # ---------- Menú usuario ----------
     with st.popover(name):   
         st.markdown(f"""
             <p><b>Nombre:</b> {name}</p>
             <p><b>Email:</b> {email}</p>
         """, unsafe_allow_html=True)
 
-    # --- Menú perfil ---
+    # ---------- Menú perfil ----------
     with st.popover("👤"):
         if st.button("Cerrar sesión"):
             url = st.experimental_get_query_params()
@@ -148,6 +145,7 @@ def render_header():
 
 
 def render_footer():
+    inject_styles()
     st.markdown(f"""
     <div class="footer">
         Made with sweetness by <span class="brand">SaE Tech Team!</span><br/>
@@ -156,7 +154,7 @@ def render_footer():
     """, unsafe_allow_html=True)
 
 def render_login_navbar():
-    # Cargar logo en base64 (si existe)
+    inject_styles()
     logo_b64 = cargar_logo_base64()
 
     st.markdown(f"""
@@ -175,25 +173,25 @@ def render_login_navbar():
     </div>
     """, unsafe_allow_html=True)
 
-# Configuración básica de logs
+# ---------- ---------- Configuración básica de logs ---------- ----------
 logging.basicConfig(
     filename="procesar_facturas.log",  # Archivo donde se guardan los logs
     level=logging.ERROR,  # Guardar solo errores y más graves
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# ---------- Interfaz ----------
+# ---------- ---------- ---------- Interfaz ---------- ---------- ----------
 def mostrar_login():
+    inject_styles()
 
     render_login_navbar()
 
     with st.container():
         st.markdown(f"""
         <div class="recuadro-login">
-            <h1 style="margin-bottom:16px;">🔐 Iniciar Sesión</h1>
-            <h3 style="margin-bottom:12px;">Convertidor pedidos ET</h3>
-            <p style="margin-bottom:24px;">Inicia sesión con tu cuenta de Microsoft para continuar.</p>
-
+            <h1>🔐 Iniciar Sesión</h1>
+            <h3>Convertidor pedidos ET</h3>
+            <p>Inicia sesión con tu cuenta de Microsoft para continuar.</p>
             <div style="display:flex; justify-content:center;">
         """, unsafe_allow_html=True)
 
@@ -203,11 +201,12 @@ def mostrar_login():
             abrir_en_nueva_pestana(auth_url)
             st.info("Se abrió una pestaña. Habilita las pestañas emergentes para esta pantalla si no se abre automáticamente.")
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div></div>', unsafe_allow_html=True)
 
     render_footer()
 
 def mostrar_aplicacion():
+    inject_styles()
 
     render_header()  
 

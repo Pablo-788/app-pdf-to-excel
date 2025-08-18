@@ -11,11 +11,13 @@ REDIRECT_URI = "https://app-pdf-to-excel.onrender.com/"            # URI registr
 SCOPES       = ["User.Read"]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
-# Crear instancia MSAL una sola vez
-if "msal_app" not in st.session_state:
-    st.session_state.msal_app = msal.PublicClientApplication(
-        CLIENT_ID, authority=AUTHORITY
-    )
+def get_msal_app():
+    """Devuelve la instancia de MSAL y la crea si no existe."""
+    if "msal_app" not in st.session_state:
+        st.session_state.msal_app = msal.PublicClientApplication(
+            CLIENT_ID, authority=AUTHORITY
+        )
+    return st.session_state.msal_app
 
 # ---------- Helper ----------
 def abrir_en_nueva_pestana(url: str):
@@ -32,6 +34,7 @@ def abrir_en_nueva_pestana(url: str):
 
 # ---------- Flujo MSAL ----------
 def iniciar_autenticacion() -> str:
+    msal_app = get_msal_app()
     """Devuelve la URL a la página de login de Microsoft."""
     return st.session_state.msal_app.get_authorization_request_url(
         SCOPES,
@@ -39,6 +42,7 @@ def iniciar_autenticacion() -> str:
     )
 
 def procesar_callback() -> bool:
+    msal_app = get_msal_app()
     """
     Si la URL trae ?code=..., lo intercambia por un access_token.
     Cierra la pestaña hija y recarga la principal.
