@@ -144,19 +144,16 @@ def render_header():
         with col2:
             st.markdown('<div class="navbar-container navbar-right">', unsafe_allow_html=True)
 
-            # ---------- Menú usuario ----------
+            # ---------- Menú ----------
             with st.popover(name, use_container_width=True):
                 st.markdown(f"""
                     <p><b>Nombre:</b> {name}</p>
                     <p><b>Email:</b> {email}</p>
+                    <hr>
                 """, unsafe_allow_html=True)
-
-            # ---------- Menú perfil ----------
-            with st.popover("👤", use_container_width=True):
                 if st.button("Cerrar sesión"):
                     st.query_params = {"logout": ["1"]}
                     st.rerun()
-
                 st.markdown(f"""
                     <p style="margin-top:8px; font-size:12px; opacity:.7;">
                         Versión: {APP_VERSION}
@@ -216,11 +213,12 @@ def mostrar_login():
             <div style="display:flex; justify-content:center;">
         """, unsafe_allow_html=True)
 
-        # Botón de Streamlit que mantiene el estilo global de .stButton
-        if st.button("🚀 Iniciar sesión", type="primary"):
-            auth_url = iniciar_autenticacion()
-            abrir_en_nueva_pestana(auth_url)
-            st.info("Se abrió una pestaña. Habilita las pestañas emergentes para esta pantalla si no se abre automáticamente.")
+        col3, col4, col5 = st.columns([1, 1, 1])
+        with col4:
+            if st.button("🚀 Iniciar sesión", type="primary"):
+                auth_url = iniciar_autenticacion()
+                abrir_en_nueva_pestana(auth_url)
+                st.info("Se abrió una pestaña. Habilita las pestañas emergentes para esta pantalla si no se abre automáticamente.")
 
         st.markdown('</div></div>', unsafe_allow_html=True)
 
@@ -250,15 +248,15 @@ def mostrar_aplicacion():
 
                 st.success("✅ ¡PDF procesado!")
 
-                st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
-                st.download_button(
-                    "📥 Descargar",
-                    data=bytes_data,
-                    file_name=nombre_archivo,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
+                col6, col7, col8 = st.columns([1, 1, 1])
+                with col7:
+                    st.download_button(
+                        "📥 Descargar",
+                        data=bytes_data,
+                        file_name=nombre_archivo,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary"
+                    )
 
             except Exception as e:
                 st.error("❌ Error al procesar el PDF.")
