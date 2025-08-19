@@ -75,11 +75,7 @@ def inject_styles():
         margin-bottom: 24px;
     }}
 
-    /* ======= BOTONES ======= */
-    .stButton, .stDownloadButton {{
-        text-align: center;
-    }}
-    
+    /* ======= BOTONES ======= */   
     .stButton > button,
     .stDownloadButton > button {{
         background:{PRIMARY_COLOR} !important;
@@ -89,9 +85,7 @@ def inject_styles():
         padding: 10px 16px !important;
         font-size: 16px !important;
         display: flex;
-        justify-content: center; 
-        margin: auto;
-        display: block;
+        justify-content: center;
     }}
 
     /* ======= FOOTER ======= */
