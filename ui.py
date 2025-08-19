@@ -77,8 +77,7 @@ def inject_styles():
 
     /* ======= BOTONES ======= */
     .stButton, .stDownloadButton {{
-        display: flex;
-        justify-content: center; /* centra el botón en el contenedor */
+        text-align: center;
     }}
     
     .stButton > button,
@@ -91,6 +90,8 @@ def inject_styles():
         font-size: 16px !important;
         display: flex;
         justify-content: center; 
+        margin: auto;
+        display: block;
     }}
 
     /* ======= FOOTER ======= */
