@@ -75,19 +75,29 @@ def inject_styles():
         margin-bottom: 24px;
     }}
 
-    /* ======= BOTONES ======= */   
+    /* ======= BOTONES ======= */
+    .stButton, .stDownloadButton {{
+            width: 100%;
+            display: flex;
+    }}
+
     .stButton > button,
-    .stDownloadButton > button {{
+    .stDownloadButton > button,
+    .stDownloadButton > a {{
         background:{PRIMARY_COLOR} !important;
         color:#fff !important; 
         border: 0 !important;
         border-radius: 8px !important;
         padding: 10px 16px !important;
         font-size: 16px !important;
-        display: flex;
-        justify-content: center;
+
+        display: inline-flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+
         width: 100% !important;
-        box-sizing: border-box;
+        box-sizing: border-box !important;
+        margin: 0.25rem 0 !important;
     }}
 
     /* ======= FOOTER ======= */
