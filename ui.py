@@ -86,6 +86,8 @@ def inject_styles():
         font-size: 16px !important;
         display: flex;
         justify-content: center;
+        width: 100% !important;
+        box-sizing: border-box;
     }}
 
     /* ======= FOOTER ======= */
