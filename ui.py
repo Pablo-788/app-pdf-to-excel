@@ -76,11 +76,6 @@ def inject_styles():
     }}
 
     /* ======= BOTONES ======= */
-    .stButton, .stDownloadButton {{
-            width: 100%;
-            display: flex;
-    }}
-
     .stButton > button,
     .stDownloadButton > button,
     .stDownloadButton > a {{
@@ -95,9 +90,15 @@ def inject_styles():
         justify-content: center !important;
         align-items: center !important;
 
-        width: 100% !important;
-        box-sizing: border-box !important;
-        margin: 0.25rem 0 !important;
+        max-width: 250px !important;
+        width: auto !important;
+        margin: 0.5rem 0 !important;
+    }}
+
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stDownloadButton > a:hover {{
+        background: #0056b3 !important;  /* cambia este color si quieres otro hover */
     }}
 
     /* ======= FOOTER ======= */
