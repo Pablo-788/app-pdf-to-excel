@@ -1,7 +1,7 @@
 import base64
 import streamlit as st
 import logging
-from auth import iniciar_autenticacion, procesar_callback, cerrar_sesion, abrir_en_nueva_pestana
+from auth import iniciar_autenticacion, procesar_callback, cerrar_sesion
 from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
@@ -208,26 +208,31 @@ logging.basicConfig(
 # ---------- ---------- ---------- Interfaz ---------- ---------- ----------
 def mostrar_login():
     inject_styles()
-
     render_login_navbar()
-
-    with st.container():
-        st.markdown(f"""
-        <div class="recuadro-login">
-            <h1>🔐 Iniciar Sesión</h1>
-            <h3>Convertidor pedidos ET</h3>
-            <p>Inicia sesión con tu cuenta de Microsoft para continuar.</p>
-            <div style="display:flex; justify-content:center;">
-        """, unsafe_allow_html=True)
-
-        col3, col4, col5 = st.columns([1, 1, 1])
-        with col4:
-            if st.button("🚀 Iniciar sesión", type="primary"):
-                auth_url = iniciar_autenticacion()
-                abrir_en_nueva_pestana(auth_url)
-                st.info("Se abrió una pestaña. Habilita las pestañas emergentes para esta pantalla si no se abre automáticamente.")
-
-        st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="recuadro-login">
+        <h1>🔐 Iniciar Sesión</h1>
+        <h3>Convertidor pedidos ET</h3>
+        <p>Inicia sesión con tu cuenta de Microsoft para continuar.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    _, col2, _ = st.columns([1, 1.5, 1])
+    with col2:
+        auth_url = iniciar_autenticacion()
+        st.markdown(
+            f"""
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="{auth_url}" target="_self" class="btn btn-primary" 
+                style="background-color: #0d6efd; border: none; color: white; 
+                        padding: 10px 20px; text-align: center; text-decoration: none; 
+                        display: inline-block; font-size: 16px; border-radius: 6px; 
+                        font-weight: 500; cursor: pointer;">
+                    🚀 Iniciar sesión
+                </a>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     render_footer()
 
