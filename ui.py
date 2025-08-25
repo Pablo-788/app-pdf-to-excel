@@ -158,9 +158,9 @@ def render_header():
                     <p><b>Email:</b> {email}</p>
                     <hr>
                 """, unsafe_allow_html=True)
+                # El botón ahora llama directamente a la función de cierre de sesión
                 if st.button("Cerrar sesión"):
-                    st.query_params = {"logout": ["1"]}
-                    st.rerun()
+                    cerrar_sesion()
                 st.markdown(f"""
                     <p style="margin-top:8px; font-size:12px; opacity:.7;">
                         Versión: {APP_VERSION}
@@ -277,7 +277,7 @@ def mostrar_aplicacion():
                 logging.exception(f"[{datetime.now()}] Error procesando archivo: {pdf_file.name}")
 
                 # Vista previa de la tabla contenida en el Excel
-            if bytes_data:
+            if 'bytes_data' in locals() and bytes_data:
                 try:
                     df_preview = pd.read_excel(bytes_data)
                     st.markdown('<div class="center-preview">', unsafe_allow_html=True)
