@@ -1,2 +1,5 @@
 # Ignorar archivos de entorno
 .env
+venv
+__pycache__
+*.log
