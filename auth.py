@@ -8,8 +8,8 @@ load_dotenv()
 
 CLIENT_ID  = os.getenv("CLIENT_ID")
 TENANT_ID  = os.getenv("TENANT_ID")
-AUTHORITY    = os.getenv("AUTHORITY")
-REDIRECT_URI = "http://localhost:8501/"
+AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
+REDIRECT_URI = "https://pedidos-et-saetech.onrender.com/"
 SCOPES       = ["User.Read"]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
