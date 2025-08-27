@@ -5,6 +5,7 @@ from auth import iniciar_autenticacion, procesar_callback, cerrar_sesion
 from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
+from exportacion_plantilla import exportar_plantilla, subir_a_sharepoint
 
 APP_TITLE   = "Convertidor Pedidos ET → Excel"
 APP_VERSION = "0.3.16"
@@ -260,6 +261,7 @@ def mostrar_aplicacion():
 
                 st.success("✅ ¡PDF procesado!")
 
+                '''                
                 col6, col7, col8 = st.columns([1, 1, 1])
                 with col7:
                     st.download_button(
@@ -269,6 +271,7 @@ def mostrar_aplicacion():
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary"
                     )
+                '''
 
             except Exception as e:
                 st.error("❌ Error al procesar el PDF.")
@@ -287,5 +290,45 @@ def mostrar_aplicacion():
                 except Exception as e:
                     st.warning("⚠️ No se pudo mostrar la vista previa de los datos.")
                     logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
+
+
+            numero_usuario = st.text_input(
+                "Introduce un número de 6 dígitos para nombre de la plantilla de SaEGA",
+                max_chars=6
+            )
+
+            # Validación del input
+            if numero_usuario:
+                if not numero_usuario.isdigit() or len(numero_usuario) != 6:
+                    st.warning("⚠️ Debes introducir exactamente 6 números.")
+                    numero_usuario = None  # invalidar para que no continue
+
+            if 'bytes_data' in locals() and bytes_data and numero_usuario:
+                try:
+                    excel_final = exportar_plantilla(bytes_data)
+                    file_name_final = f"{numero_usuario} - SaeGA.xlsm"
+
+                    # session: tu sesión ya autenticada
+                    exito = subir_a_sharepoint(excel_final, file_name_final)
+                    if exito:
+                        st.success("✅ Archivo subido correctamente a SharePoint")
+                    else:
+                        st.error("❌ No se pudo subir el archivo a SharePoint")
+
+                    col6, col7, col8 = st.columns([1, 1, 1])
+                    with col7:
+                        st.download_button(
+                            "📥 Descargar Plantilla de SaEGA",
+                            data=excel_final,
+                            file_name=file_name_final,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            type="primary"
+                        )
+
+                except Exception as e:
+                    st.error("❌ Error al exportar a plantilla final.")
+                    with st.expander("Detalles del error"):
+                        st.code(str(e))
+                    logging.exception(f"[{datetime.now()}] Error en exportación plantilla: {e}")
 
     render_footer()

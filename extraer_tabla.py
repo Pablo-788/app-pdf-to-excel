@@ -8,7 +8,8 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 import time
 
 # 📋 Columnas de salida
-COLUMNAS = ["Número de artículo",    # Relleno
+COLUMNAS = ["Tienda",                # Relleno
+    "Código",                        # Relleno
     "Descripción de artículo",       # Vacío
     "Cantidad",                      # Relleno
     "Precio por unidad",             # Vacío
@@ -66,6 +67,7 @@ def procesar_pdf(file_stream, nombre_pdf):
 
                         if codigo and uds:
                             fila = [
+                                tienda_detectada,
                                 codigo,      # Número de artículo
                                 "",          # Descripción
                                 uds,         # Cantidad
