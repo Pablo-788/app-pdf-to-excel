@@ -3,6 +3,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from copy import copy
+import requests
 
 def exportar_plantilla(bytes_data: bytes) -> BytesIO:
     
@@ -63,23 +64,25 @@ def exportar_plantilla(bytes_data: bytes) -> BytesIO:
     return output
 
 
-def subir_a_sharepoint(bytes_io: BytesIO, nombre_archivo: str, session) -> bool:
-    url_carpeta_sharepoint = "/sites/departamento.ti/Documentos%20compartidos/General/PoC%20Plantillas%20SaEGA" # Cambiar por la ruta real
+def subir_a_sharepoint(bytes_io: BytesIO, nombre_archivo: str, access_token: str) -> bool:
+    site_id = "saboraespana.sharepoint.com:/sites/departamento.ti"
+    drive_id = "b!Y2iXc4H7m3x8eF0z3K9Jt2v1L6gR5QW8x9y0Z1A2B3C4D5E6F7G8H9I0J1K2L3M4"
+    carpeta_path = "General/PoC Plantillas SaEGA"
 
     try:
         # Asegurarnos de que BytesIO está al inicio
         bytes_io.seek(0)
 
-        # Construir URL final del archivo en SharePoint
-        # Normalmente SharePoint requiere /_api/web/GetFolderByServerRelativeUrl('ruta')/Files/add(url='archivo',overwrite=true)
-        url_subida = f"{url_carpeta_sharepoint}/_api/web/GetFolderByServerRelativeUrl('{url_carpeta_sharepoint}')/Files/add(url='{nombre_archivo}',overwrite=true)"
+        # Construir URL de subida
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{carpeta_path}/{nombre_archivo}:/content"
 
         headers = {
-            "accept": "application/json;odata=verbose"
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/octet-stream"
         }
 
-        response = session.post(url_subida, headers=headers, data=bytes_io.read())
-        response.raise_for_status()  # lanza excepción si no es 2xx
+        response = requests.put(url, headers=headers, data=bytes_io.read())
+        response.raise_for_status()
 
         return True
     except Exception as e:

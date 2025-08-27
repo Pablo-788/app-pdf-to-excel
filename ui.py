@@ -232,8 +232,7 @@ def mostrar_login():
                 </a>
             </div>
             """,
-            unsafe_allow_html=True
-        )
+            unsafe_allow_html=True)
 
     render_footer()
 
@@ -253,7 +252,7 @@ def mostrar_aplicacion():
     if pdf_file is not None:
         with st.spinner("Extrayendo datos, dame unos segundos…"):
             try:
-                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name, st.session_state)
+                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name, st.session_state.access_token)
 
                 output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
                 bytes_data = output_excel.getvalue()  # guardamos el contenido en memoria
@@ -309,7 +308,7 @@ def mostrar_aplicacion():
                     file_name_final = f"{numero_usuario} - SaeGA.xlsm"
 
                     # session: tu sesión ya autenticada
-                    exito = subir_a_sharepoint(excel_final, file_name_final)
+                    exito = subir_a_sharepoint(excel_final, file_name_final, st.session_state.access_token)
                     if exito:
                         st.success("✅ Archivo subido correctamente a SharePoint")
                     else:

@@ -5,9 +5,12 @@ import os
 import re
 from openpyxl import load_workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
+import time
+import requests
 
 # 📋 Columnas de salida
-COLUMNAS = ["Número de artículo",    # Relleno
+COLUMNAS = ["Tienda",                # Relleno
+    "Código",                        # Relleno
     "Descripción de artículo",       # Vacío
     "Cantidad",                      # Relleno
     "Precio por unidad",             # Vacío
@@ -20,7 +23,7 @@ COLUMNAS = ["Número de artículo",    # Relleno
     "Precio de coste Departamento"   # Vacío
 ]
 
-def procesar_pdf(file_stream, nombre_pdf, session):
+def procesar_pdf(file_stream, nombre_pdf, sesion):
     NOMBRE_BASE = os.path.splitext(nombre_pdf)[0]
 
     # 📥 Extraer valores desde la primera tabla real del PDF
@@ -29,13 +32,7 @@ def procesar_pdf(file_stream, nombre_pdf, session):
         tablas = primera_pagina.extract_tables()
 
         try:
-            # Esta función ahora podría usar la 'session' si fuera necesario
-            def obtener_orden_maestro(pdf_tables, session_info):
-                # Aquí iría la lógica que necesite la sesión
-                # Por ahora, extraemos de las tablas como antes
-                return pdf_tables[0][1]
-
-            valores = obtener_orden_maestro(tablas, session)
+            valores = tablas[0][1]  # Fila de datos (segunda fila)
             valor_pedido = valores[1]
         except Exception as e:
             print("⚠️ Error al extraer datos de la tabla:", e)
@@ -71,6 +68,7 @@ def procesar_pdf(file_stream, nombre_pdf, session):
 
                         if codigo and uds:
                             fila = [
+                                tienda_detectada,
                                 codigo,      # Número de artículo
                                 "",          # Descripción
                                 uds,         # Cantidad
@@ -87,10 +85,82 @@ def procesar_pdf(file_stream, nombre_pdf, session):
 
         return filas_resultado, tienda_detectada
 
+    def ordenar_lineas(df, orden_maestro):
+        # Crear diccionario: código → posición en el orden maestro
+        pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
+
+        # Columna auxiliar con la posición, por defecto inf si no está en el maestro
+        df["orden_idx"] = df["Número de artículo"].map(lambda x: pos.get(x, float("inf")))
+
+        # Ordenar según esa columna y eliminarla
+        df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
+
+        return df
+    
+    # Variable de caché a nivel de función
+    _cache_orden_maestro = {
+        "timestamp": 0,
+        "orden_maestro": []
+    }
+
+    def obtener_orden_maestro(access_token, cache_tiempo_seg=5):
+        url_excel_sharepoint = "https://saboraespana.sharepoint.com/sites/DepartamentodeProducto/Documentos compartidos/General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
+        nombre_hoja = "SURFACE"
+        nombre_tabla = "OrdenPreparacion"
+        columna_codigos = "SKU"
+
+        nonlocal _cache_orden_maestro
+        ahora = time.time()
+
+        # 1️⃣ Revisar si la cache sigue vigente
+        if ahora - _cache_orden_maestro["timestamp"] < cache_tiempo_seg:
+            return _cache_orden_maestro["orden_maestro"]
+
+        # 2️⃣ Descargar el archivo de SharePoint en memoria
+        headers = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(url_excel_sharepoint, headers=headers)
+        response.raise_for_status()  # lanzar error si falla la descarga
+
+        file_bytes = BytesIO(response.content)
+
+        # 3️⃣ Leer Excel con openpyxl
+        wb = load_workbook(file_bytes, data_only=True)
+        ws = wb[nombre_hoja]
+
+        # 4️⃣ Obtener la tabla por nombre
+        tabla = ws.tables[nombre_tabla]
+        ref = tabla.ref  # Ejemplo: "A1:C200"
+        rango = ws[ref]
+
+        # 5️⃣ Convertir a DataFrame con pandas (igual que antes, pero solo ese rango)
+        contenido = [[celda.value for celda in fila] for fila in rango]
+        df_maestro = pd.DataFrame(contenido[1:], columns=contenido[0])
+
+        # 6️⃣ Extraer columna de códigos y normalizar
+        orden_maestro = (
+            df_maestro[columna_codigos]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .str.lstrip("0")
+            .tolist()
+        )
+
+        # 7️⃣ Actualizar cache
+        _cache_orden_maestro["timestamp"] = ahora
+        _cache_orden_maestro["orden_maestro"] = orden_maestro
+
+        return orden_maestro
+
     # ▶️ Ejecutar
-    file_stream.seek(0) # Reiniciamos el puntero del stream por si se ha movido
     filas, tienda_detectada = extraer_tabla(file_stream)
     df = pd.DataFrame(filas, columns=COLUMNAS)
+
+    # Aquí obtenemos el orden maestro desde SharePoint
+    orden_maestro = obtener_orden_maestro(sesion)
+
+    # Aquí llamas a ordenar_lineas
+    df = ordenar_lineas(df, orden_maestro)
 
     # 🧾 Guardar Excel en memoria
     output = BytesIO()
@@ -122,7 +192,7 @@ def procesar_pdf(file_stream, nombre_pdf, session):
     wb_tabla.save(output_tabla)
     output_tabla.seek(0)
 
-    # --- Bloque de código corregido y activado ---
+    '''
     # Reabrimos el archivo en memoria
     wb = load_workbook(output_tabla)
     ws = wb["Datos"]
@@ -136,8 +206,8 @@ def procesar_pdf(file_stream, nombre_pdf, session):
     nuevo_output = BytesIO()
     wb.save(nuevo_output)
     nuevo_output.seek(0)
-    # --- Fin del bloque ---
+    '''
 
     nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
 
-    return nuevo_output, nombre_final
+    return output_tabla, nombre_final
