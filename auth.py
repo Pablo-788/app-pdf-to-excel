@@ -9,7 +9,7 @@ load_dotenv()
 CLIENT_ID  = os.getenv("CLIENT_ID")
 TENANT_ID  = os.getenv("TENANT_ID")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "https://pedidos-et-saetech.onrender.com/"
+REDIRECT_URI = "http://localhost:8501/"
 SCOPES       = ["User.Read"]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
@@ -66,9 +66,9 @@ def procesar_callback() -> bool:
         user_claims = result.get("id_token_claims", {})
         user_groups = user_claims.get("groups") or []
 
-        if ALLOWED_GROUP_ID not in user_groups:
-            st.error("❌ No tienes permisos para acceder a esta aplicación.")
-            return True  # Detiene el flujo y evita mostrar la app
+       # if ALLOWED_GROUP_ID not in user_groups:
+        #    st.error("❌ No tienes permisos para acceder a esta aplicación.")
+       #     return True  # Detiene el flujo y evita mostrar la app
 
         # Si está en el grupo permitido, guarda sesión
         st.session_state.access_token = result["access_token"]

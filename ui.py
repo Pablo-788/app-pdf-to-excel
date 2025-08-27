@@ -253,7 +253,7 @@ def mostrar_aplicacion():
     if pdf_file is not None:
         with st.spinner("Extrayendo datos, dame unos segundos…"):
             try:
-                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name)
+                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name, st.session_state)
 
                 output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
                 bytes_data = output_excel.getvalue()  # guardamos el contenido en memoria
