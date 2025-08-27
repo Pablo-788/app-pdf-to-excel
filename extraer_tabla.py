@@ -5,6 +5,7 @@ import os
 import re
 from openpyxl import load_workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
+import time
 
 # 📋 Columnas de salida
 COLUMNAS = ["Número de artículo",    # Relleno
@@ -81,9 +82,80 @@ def procesar_pdf(file_stream, nombre_pdf):
 
         return filas_resultado, tienda_detectada
 
+    def ordenar_lineas(df, orden_maestro):
+        # Crear diccionario: código → posición en el orden maestro
+        pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
+
+        # Columna auxiliar con la posición, por defecto inf si no está en el maestro
+        df["orden_idx"] = df["Número de artículo"].map(lambda x: pos.get(x, float("inf")))
+
+        # Ordenar según esa columna y eliminarla
+        df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
+
+        return df
+    
+    # Variable de caché a nivel de función
+    _cache_orden_maestro = {
+        "timestamp": 0,
+        "orden_maestro": []
+    }
+
+    def obtener_orden_maestro(session, cache_tiempo_seg=5):
+        url_excel_sharepoint = "https://saboraespana.sharepoint.com/sites/DepartamentodeProducto/Documentos%20compartidos/General/Aplicaciones/Cadena%20de%20Suministro/Herramienta%20de%20Aprovisionamiento%20v1.0.2.xlsx"
+        nombre_hoja = "SURFACE"
+        nombre_tabla = "OrdenPreparacion"
+        columna_codigos = "SKU"
+
+        global _cache_orden_maestro
+        ahora = time.time()
+
+        # 1️⃣ Revisar si la cache sigue vigente
+        if ahora - _cache_orden_maestro["timestamp"] < cache_tiempo_seg:
+            return _cache_orden_maestro["orden_maestro"]
+
+        # 2️⃣ Descargar el archivo de SharePoint en memoria
+        response = session.get(url_excel_sharepoint)
+        response.raise_for_status()  # lanzar error si falla la descarga
+        file_bytes = BytesIO(response.content)
+
+        # 3️⃣ Leer Excel con openpyxl
+        wb = load_workbook(file_bytes, data_only=True)
+        ws = wb[nombre_hoja]
+
+        # 4️⃣ Obtener la tabla por nombre
+        tabla = ws.tables[nombre_tabla]
+        ref = tabla.ref  # Ejemplo: "A1:C200"
+        rango = ws[ref]
+
+        # 5️⃣ Convertir a DataFrame con pandas (igual que antes, pero solo ese rango)
+        contenido = [[celda.value for celda in fila] for fila in rango]
+        df_maestro = pd.DataFrame(contenido[1:], columns=contenido[0])
+
+        # 6️⃣ Extraer columna de códigos y normalizar
+        orden_maestro = (
+            df_maestro[columna_codigos]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .str.lstrip("0")
+            .tolist()
+        )
+
+        # 7️⃣ Actualizar cache
+        _cache_orden_maestro["timestamp"] = ahora
+        _cache_orden_maestro["orden_maestro"] = orden_maestro
+
+        return orden_maestro
+
     # ▶️ Ejecutar
     filas, tienda_detectada = extraer_tabla(file_stream)
     df = pd.DataFrame(filas, columns=COLUMNAS)
+
+    # Aquí obtenemos el orden maestro desde SharePoint
+    orden_maestro = obtener_orden_maestro()
+
+    # Aquí llamas a ordenar_lineas
+    df = ordenar_lineas(df, orden_maestro)
 
     # 🧾 Guardar Excel en memoria
     output = BytesIO()
