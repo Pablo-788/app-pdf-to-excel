@@ -3,6 +3,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from copy import copy
+from office365.sharepoint.client_context import ClientContext
 
 def exportar_plantilla(bytes_data: bytes) -> BytesIO:
     
@@ -62,26 +63,30 @@ def exportar_plantilla(bytes_data: bytes) -> BytesIO:
     output.seek(0)
     return output
 
-
-def subir_a_sharepoint(bytes_io: BytesIO, nombre_archivo: str, session) -> bool:
-    url_carpeta_sharepoint = "/sites/departamento.ti/Documentos%20compartidos/General/PoC%20Plantillas%20SaEGA" # Cambiar por la ruta real
-
+def subir_a_sharepoint(bytes_io: BytesIO, nombre_archivo: str, ctx: ClientContext) -> bool:
+    """
+    Sube un archivo (desde BytesIO) a una carpeta de SharePoint usando un ClientContext.
+    """
     try:
-        # Asegurarnos de que BytesIO está al inicio
+        # Ruta relativa de la carpeta donde se guardará el archivo
+        ruta_carpeta_destino = "Documentos compartidos/General/PoC Plantillas SaEGA"
+
+        # Obtener el objeto de la carpeta de destino
+        target_folder = ctx.web.get_folder_by_server_relative_path(ruta_carpeta_destino)
+        
+        # Mover el puntero al inicio y leer los bytes del archivo
         bytes_io.seek(0)
+        file_content = bytes_io.getvalue()
 
-        # Construir URL final del archivo en SharePoint
-        # Normalmente SharePoint requiere /_api/web/GetFolderByServerRelativeUrl('ruta')/Files/add(url='archivo',overwrite=true)
-        url_subida = f"{url_carpeta_sharepoint}/_api/web/GetFolderByServerRelativeUrl('{url_carpeta_sharepoint}')/Files/add(url='{nombre_archivo}',overwrite=true)"
+        # Subir el archivo
+        target_folder.upload_file(nombre_archivo, file_content)
+        
+        # Ejecutar la operación en SharePoint
+        ctx.execute_query()
 
-        headers = {
-            "accept": "application/json;odata=verbose"
-        }
-
-        response = session.post(url_subida, headers=headers, data=bytes_io.read())
-        response.raise_for_status()  # lanza excepción si no es 2xx
-
+        st.success(f"✅ Archivo '{nombre_archivo}' subido a SharePoint con éxito.")
         return True
+
     except Exception as e:
-        print(f"Error subiendo archivo a SharePoint: {e}")
+        st.error(f"❌ Error al subir a SharePoint: {e}")
         return False

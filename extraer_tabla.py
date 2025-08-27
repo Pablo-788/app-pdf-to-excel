@@ -1,3 +1,4 @@
+# extraer_tabla.py
 from io import BytesIO
 import pdfplumber
 import pandas as pd
@@ -20,7 +21,7 @@ COLUMNAS = ["Número de artículo",    # Relleno
     "Precio de coste Departamento"   # Vacío
 ]
 
-def procesar_pdf(file_stream, nombre_pdf, session):
+def procesar_pdf(file_stream, nombre_pdf):
     NOMBRE_BASE = os.path.splitext(nombre_pdf)[0]
 
     # 📥 Extraer valores desde la primera tabla real del PDF
@@ -29,13 +30,7 @@ def procesar_pdf(file_stream, nombre_pdf, session):
         tablas = primera_pagina.extract_tables()
 
         try:
-            # Esta función ahora podría usar la 'session' si fuera necesario
-            def obtener_orden_maestro(pdf_tables, session_info):
-                # Aquí iría la lógica que necesite la sesión
-                # Por ahora, extraemos de las tablas como antes
-                return pdf_tables[0][1]
-
-            valores = obtener_orden_maestro(tablas, session)
+            valores = tablas[0][1]  # Fila de datos (segunda fila)
             valor_pedido = valores[1]
         except Exception as e:
             print("⚠️ Error al extraer datos de la tabla:", e)
@@ -71,24 +66,13 @@ def procesar_pdf(file_stream, nombre_pdf, session):
 
                         if codigo and uds:
                             fila = [
-                                codigo,      # Número de artículo
-                                "",          # Descripción
-                                uds,         # Cantidad
-                                "",          # Precio por unidad
-                                "",          # % de descuento
-                                "",          # Precio después del descuento
-                                "",          # Indicador de impuestos
-                                "",          # Total (ML)
-                                "001",       # Unidad de negocio
-                                "",          # Código de unidad de medida
-                                "985"        # Precio de coste Departamento
+                                codigo, "","uds","","","","","","001","","985"
                             ]
                             filas_resultado.append(fila)
 
         return filas_resultado, tienda_detectada
 
     # ▶️ Ejecutar
-    file_stream.seek(0) # Reiniciamos el puntero del stream por si se ha movido
     filas, tienda_detectada = extraer_tabla(file_stream)
     df = pd.DataFrame(filas, columns=COLUMNAS)
 
@@ -116,27 +100,14 @@ def procesar_pdf(file_stream, nombre_pdf, session):
     )
     tabla.tableStyleInfo = estilo
     ws_tabla.add_table(tabla)
-
-    # Guardamos el Excel con tabla en memoria
-    output_tabla = BytesIO()
-    wb_tabla.save(output_tabla)
-    output_tabla.seek(0)
-
-    # --- Bloque de código corregido y activado ---
-    # Reabrimos el archivo en memoria
-    wb = load_workbook(output_tabla)
-    ws = wb["Datos"]
-
+    
     # Escribimos el resumen en una celda fuera de la tabla
-    ultima_fila = ws.max_row
-    resumen_texto = f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}"
-    ws.cell(row=ultima_fila + 2, column=1).value = resumen_texto
+    ws_tabla.cell(row=ultima_fila + 2, column=1).value = f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}"
 
     # Guardamos los cambios en un nuevo BytesIO
     nuevo_output = BytesIO()
-    wb.save(nuevo_output)
+    wb_tabla.save(nuevo_output)
     nuevo_output.seek(0)
-    # --- Fin del bloque ---
 
     nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
 

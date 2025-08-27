@@ -6,6 +6,9 @@ from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
 from exportacion_plantilla import exportar_plantilla, subir_a_sharepoint
+from office365.sharepoint.client_context import ClientContext
+from io import BytesIO
+from sharepoint_utils import get_sharepoint_context, subir_a_sharepoint
 
 APP_TITLE   = "Convertidor Pedidos ET → Excel"
 APP_VERSION = "0.3.16"
@@ -237,98 +240,66 @@ def mostrar_login():
 
     render_footer()
 
+
+#  --- Lógica Principal de la Aplicación ---
 def mostrar_aplicacion():
-    inject_styles()
+    # render_header() # Si tienes esta función, descoméntala
 
-    render_header()  
+    if 'excel_bytes' not in st.session_state:
+        st.session_state.excel_bytes = None
+        st.session_state.nombre_archivo = None
 
-    st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
+    st.markdown("##### 1. Sube el archivo PDF del pedido")
     pdf_file = st.file_uploader(
         "Selecciona un PDF de factura",
         type=["pdf"],
-        help="Sube un PDF que contenga tablas con productos y la etiqueta 'TIENDA'."
+        label_visibility="collapsed"
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    if pdf_file is not None:
-        with st.spinner("Extrayendo datos, dame unos segundos…"):
+    if pdf_file:
+        with st.spinner("Extrayendo datos del PDF..."):
             try:
-                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name, st.session_state)
-
-                output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
-                bytes_data = output_excel.getvalue()  # guardamos el contenido en memoria
-                output_excel.close()    
-
-                st.success("✅ ¡PDF procesado!")
-
-                '''                
-                col6, col7, col8 = st.columns([1, 1, 1])
-                with col7:
-                    st.download_button(
-                        "📥 Descargar",
-                        data=bytes_data,
-                        file_name=nombre_archivo,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="primary"
-                    )
-                '''
+                output_stream, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name)
+                st.session_state.excel_bytes = output_stream.getvalue()
+                st.session_state.nombre_archivo = nombre_archivo
+                st.success("¡PDF procesado con éxito!")
 
             except Exception as e:
-                st.error("❌ Error al procesar el PDF.")
-                with st.expander("Detalles del error"):
-                    st.code(str(e))
-                logging.exception(f"[{datetime.now()}] Error procesando archivo: {pdf_file.name}")
+                st.error(f"❌ Error al procesar el PDF: {e}")
+                st.session_state.excel_bytes = None
+                st.session_state.nombre_archivo = None
 
-                # Vista previa de la tabla contenida en el Excel
-            if 'bytes_data' in locals() and bytes_data:
-                try:
-                    df_preview = pd.read_excel(bytes_data)
-                    st.markdown('<div class="center-preview">', unsafe_allow_html=True)
-                    st.markdown("#### 📋 Vista previa de los datos extraidos")
-                    st.dataframe(df_preview, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)       
-                except Exception as e:
-                    st.warning("⚠️ No se pudo mostrar la vista previa de los datos.")
-                    logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
+    if st.session_state.excel_bytes:
+        st.markdown("---")
+        st.markdown("##### 2. Acciones y Vista Previa")
 
+        col1, col2 = st.columns(2)
+        with col1:
+            # --- CORRECCIÓN DE STREAMLIT ---
+            if st.button("📤 Subir a SharePoint", width='stretch'):
+                with st.spinner("Conectando con SharePoint y subiendo archivo..."):
+                    bytes_para_subir = BytesIO(st.session_state.excel_bytes)
+                    
+                    if subir_a_sharepoint(bytes_para_subir, st.session_state.nombre_archivo):
+                        st.success("¡Archivo subido a SharePoint correctamente!")
 
-            numero_usuario = st.text_input(
-                "Introduce un número de 6 dígitos para nombre de la plantilla de SaEGA",
-                max_chars=6
+        with col2:
+            # --- CORRECCIÓN DE STREAMLIT ---
+            st.download_button(
+                "📥 Descargar Excel",
+                data=st.session_state.excel_bytes,
+                file_name=st.session_state.nombre_archivo,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                width='stretch'
             )
 
-            # Validación del input
-            if numero_usuario:
-                if not numero_usuario.isdigit() or len(numero_usuario) != 6:
-                    st.warning("⚠️ Debes introducir exactamente 6 números.")
-                    numero_usuario = None  # invalidar para que no continue
-
-            if 'bytes_data' in locals() and bytes_data and numero_usuario:
-                try:
-                    excel_final = exportar_plantilla(bytes_data)
-                    file_name_final = f"{numero_usuario} - SaeGA.xlsm"
-
-                    # session: tu sesión ya autenticada
-                    exito = subir_a_sharepoint(excel_final, file_name_final)
-                    if exito:
-                        st.success("✅ Archivo subido correctamente a SharePoint")
-                    else:
-                        st.error("❌ No se pudo subir el archivo a SharePoint")
-
-                    col6, col7, col8 = st.columns([1, 1, 1])
-                    with col7:
-                        st.download_button(
-                            "📥 Descargar Plantilla de SaEGA",
-                            data=excel_final,
-                            file_name=file_name_final,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            type="primary"
-                        )
-
-                except Exception as e:
-                    st.error("❌ Error al exportar a plantilla final.")
-                    with st.expander("Detalles del error"):
-                        st.code(str(e))
-                    logging.exception(f"[{datetime.now()}] Error en exportación plantilla: {e}")
-
+        try:
+            st.markdown("##### 📋 Vista previa de los datos extraídos")
+            bytes_para_preview = BytesIO(st.session_state.excel_bytes)
+            df_preview = pd.read_excel(bytes_para_preview)
+            # --- CORRECCIÓN DE STREAMLIT ---
+            st.dataframe(df_preview, width='stretch')
+        except Exception as e:
+            st.error(f"⚠️ No se pudo mostrar la vista previa: {e}")
+    
     render_footer()
