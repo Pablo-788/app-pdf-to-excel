@@ -5,6 +5,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 import msal
 
+import jwt
+
 load_dotenv()
 
 CLIENT_ID  = os.getenv("CLIENT_ID")
@@ -12,9 +14,12 @@ TENANT_ID  = os.getenv("TENANT_ID")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_URI = "http://localhost:8501/"
 
-# --- CAMBIO IMPORTANTE Y DEFINITIVO ---
-# Este es el permiso correcto para la API de Microsoft Graph
+# Opción A: usar /.default (requiere admin consent previo de los permisos delegados configurados)
 SCOPES = ["https://graph.microsoft.com/.default"]
+
+
+# Opción B (recomendada para pruebas): pedir explícitamente los scopes delegados que necesitas
+# SCOPES = ["Files.ReadWrite.All", "Sites.ReadWrite.All", "offline_access", "openid", "profile", "email"]
 
 def get_msal_app():
     if "msal_app" not in st.session_state:
@@ -28,6 +33,12 @@ def iniciar_autenticacion() -> str:
         SCOPES,
         redirect_uri=REDIRECT_URI
     )
+
+def _decode_access_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+    except Exception as e:
+        return {"_decode_error": str(e)}
 
 def procesar_callback() -> bool:
     if "access_token" in st.session_state or "code" not in st.query_params:
@@ -45,8 +56,21 @@ def procesar_callback() -> bool:
 
     if "access_token" in result:
         st.session_state.access_token = result["access_token"]
+        st.session_state.id_token     = result.get("id_token")
         st.session_state.user_info    = result.get("id_token_claims", {})
-        
+
+  
+        st.session_state.token_claims = _decode_access_token(result["access_token"])
+  
+        claims = st.session_state.token_claims
+        st.session_state.token_mode = "delegated" if claims.get("scp") else ("app-only" if claims.get("roles") else "unknown")
+
+ 
+        scp   = claims.get("scp")
+        roles = claims.get("roles")
+        resumen = f"modo={st.session_state.token_mode} | scp={scp} | roles={roles}"
+        st.toast(f"Token obtenido: {resumen}")
+
         components.html("<script>window.close();</script>", height=0, width=0)
         st.query_params.clear()
         st.rerun()
@@ -57,6 +81,6 @@ def procesar_callback() -> bool:
 
 def cerrar_sesion():
     st.query_params.clear()
-    for k in ("access_token", "user_info", "msal_app"):
+    for k in ("access_token", "id_token", "user_info", "token_claims", "token_mode", "msal_app"):
         st.session_state.pop(k, None)
     st.rerun()

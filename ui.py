@@ -163,6 +163,16 @@ def render_header():
                     <hr>
                 """, unsafe_allow_html=True)
                 # El botón ahora llama directamente a la función de cierre de sesión
+                claims = st.session_state.get("token_claims")
+                if claims:
+                    with st.expander("🔍 Depuración del token"):
+                        st.write("**Modo**:", st.session_state.get("token_mode"))
+                        st.write("**scp** (delegado):", claims.get("scp"))
+                        st.write("**roles** (app-only):", claims.get("roles"))
+                        st.write("**upn/preferred_username**:", claims.get("upn") or claims.get("preferred_username"))
+                        st.json(claims)  # todo el JWT decodificado
+                else:
+                    st.info("Inicia sesión para ver las claims del token.")
                 if st.button("Cerrar sesión"):
                     cerrar_sesion()
                 st.markdown(f"""
@@ -243,7 +253,7 @@ def mostrar_login():
 
 #  --- Lógica Principal de la Aplicación ---
 def mostrar_aplicacion():
-    # render_header() # Si tienes esta función, descoméntala
+    render_header() # Si tienes esta función, descoméntala
 
     if 'excel_bytes' not in st.session_state:
         st.session_state.excel_bytes = None

@@ -35,51 +35,52 @@ def get_sharepoint_context() -> ClientContext:
     return ctx
 
 def subir_a_sharepoint(bytes_io: BytesIO, nombre_archivo: str) -> bool:
-    """
-    Sube un archivo a SharePoint usando la API de Microsoft Graph directamente.
-    """
+    import urllib.parse, requests, streamlit as st
+
     access_token = st.session_state.get("access_token")
     if not access_token:
         st.error("Error de autenticación: No se encontró el token de acceso.")
         return False
 
-    # --- Configuración de tu SharePoint ---
-    HOST_NAME = "saboraespana.sharepoint.com"
-    SITE_PATH = "/sites/departamento.ti"
-    
-    # --- CORRECCIÓN DEFINITIVA DE LA RUTA ---
-    # La ruta debe ser RELATIVA a la biblioteca de documentos principal ("Documentos compartidos").
-    # Por lo tanto, no incluimos "Documentos compartidos" en la ruta.
-    FOLDER_PATH = "General/PoC Plantillas SaEGA"
+    HOST_NAME  = "saboraespana.sharepoint.com"
+    SITE_PATH  = "/sites/departamento.ti"              # ¡con la barra inicial!
+    FOLDER_PATH = "General/testPlantillas"       # sin “Documentos compartidos”
 
-    # --- Codificación de caracteres especiales en el nombre del archivo ---
-    nombre_archivo_encoded = urllib.parse.quote(nombre_archivo)
-
-    # --- Construcción de la URL para la API de Graph (VERSIÓN FINAL) ---
-    site_identifier = f"{HOST_NAME}:{SITE_PATH}"
-    
-    # La URL ahora usa la ruta corregida
-    graph_url = f"https://graph.microsoft.com/v1.0/sites/{site_identifier}/drive/root:/{FOLDER_PATH}/{nombre_archivo_encoded}:/content"
+    # Codifica carpeta y nombre (mantén las / de la ruta)
+    encoded_folder = urllib.parse.quote(FOLDER_PATH.strip("/"), safe="/")
+    encoded_name   = urllib.parse.quote(nombre_archivo)
 
     headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
 
     try:
+        # 1) Resolver el siteId por ruta
+        site_url = f"https://graph.microsoft.com/v1.0/sites/{HOST_NAME}:{SITE_PATH}"
+        site_resp = requests.get(site_url, headers=headers)
+        site_resp.raise_for_status()
+        site_id = site_resp.json()["id"]
+
+        # 2) Subir usando el siteId (drive por defecto del sitio)
+        upload_url = (
+            f"https://graph.microsoft.com/v1.0/"
+            f"sites/{site_id}/drive/root:/{encoded_folder}/{encoded_name}:/content"
+        )
+
         bytes_io.seek(0)
-        file_content = bytes_io.getvalue()
-        
-        response = requests.put(url=graph_url, headers=headers, data=file_content)
-        
-        response.raise_for_status()
-        
+        put_resp = requests.put(upload_url, headers=headers, data=bytes_io.getvalue())
+        put_resp.raise_for_status()
         return True
-        
+
     except requests.exceptions.HTTPError as e:
-        error_details = e.response.json()
-        error_message = error_details.get("error", {}).get("message", "Sin detalles adicionales.")
-        st.error(f"❌ Error al subir a SharePoint: {e.response.status_code} - {error_message}")
+        try:
+            err = e.response.json()
+            msg = err.get("error", {}).get("message", str(err))
+        except Exception:
+            msg = e.response.text
+        st.error(f"❌ Error al subir a SharePoint: {e.response.status_code} - {msg}")
         return False
     except Exception as e:
         st.error(f"❌ Ocurrió un error inesperado: {e}")
