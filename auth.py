@@ -9,8 +9,13 @@ load_dotenv()
 CLIENT_ID  = os.getenv("CLIENT_ID")
 TENANT_ID  = os.getenv("TENANT_ID")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "https://pedidos-et-saetech.onrender.com/"
-SCOPES       = ["User.Read"]
+REDIRECT_URI = "http://localhost:8501/"
+SCOPES       =  [
+    "User.Read",          # Perfil básico del usuario
+    "Files.Read",         # Leer archivos del usuario en OneDrive y SharePoint
+    "Sites.Read.All",     # Leer cualquier sitio que el usuario pueda ver
+    "Files.Read.All"      # Leer todos los archivos de los usuarios a los que el usuario tiene acceso
+]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
 def get_msal_app():

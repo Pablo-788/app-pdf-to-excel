@@ -308,11 +308,13 @@ def mostrar_aplicacion():
                     file_name_final = f"{numero_usuario} - SaeGA.xlsm"
 
                     # session: tu sesión ya autenticada
+                    '''
                     exito = subir_a_sharepoint(excel_final, file_name_final, st.session_state.access_token)
                     if exito:
                         st.success("✅ Archivo subido correctamente a SharePoint")
                     else:
                         st.error("❌ No se pudo subir el archivo a SharePoint")
+                    '''
 
                     col6, col7, col8 = st.columns([1, 1, 1])
                     with col7:

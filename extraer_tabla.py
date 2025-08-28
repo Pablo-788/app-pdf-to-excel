@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
 import time
 import requests
+from urllib.parse import quote
 
 # 📋 Columnas de salida
 COLUMNAS = ["Tienda",                # Relleno
@@ -68,8 +69,8 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
 
                         if codigo and uds:
                             fila = [
-                                tienda_detectada,
-                                codigo,      # Número de artículo
+                                f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",  # Tienda
+                                codigo,      # Código
                                 "",          # Descripción
                                 uds,         # Cantidad
                                 "",          # Precio por unidad
@@ -104,7 +105,10 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
     }
 
     def obtener_orden_maestro(access_token, cache_tiempo_seg=5):
-        url_excel_sharepoint = "https://saboraespana.sharepoint.com/sites/DepartamentodeProducto/Documentos compartidos/General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
+        hostname="saboraespana.sharepoint.com"
+        site_name="DepartamentodeProducto"
+        file_path="Documentos Compartidos/General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
+        file_path = quote(file_path)
         nombre_hoja = "SURFACE"
         nombre_tabla = "OrdenPreparacion"
         columna_codigos = "SKU"
@@ -117,14 +121,45 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
             return _cache_orden_maestro["orden_maestro"]
 
         # 2️⃣ Descargar el archivo de SharePoint en memoria
-        headers = {"Authorization": f"Bearer {access_token}"}
-        response = requests.get(url_excel_sharepoint, headers=headers)
-        response.raise_for_status()  # lanzar error si falla la descarga
+        """
+        Descarga un archivo Excel desde SharePoint y lo devuelve como objeto openpyxl.Workbook.
 
-        file_bytes = BytesIO(response.content)
+        :param access_token: Token OAuth2 obtenido con MSAL
+        :param hostname: dominio del SharePoint (ej: 'contoso.sharepoint.com')
+        :param site_name: nombre del sitio (ej: 'MiProyecto')
+        :param file_path: ruta al archivo dentro de la biblioteca (ej: 'Carpeta/archivo.xlsx')
+        :return: objeto openpyxl.Workbook
+        """
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        # 2️⃣.1 Obtener siteId
+        site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site_name}"
+        site_resp = requests.get(site_url, headers=headers)
+        site_resp.raise_for_status()
+        site_id = site_resp.json()["id"]            #saboraespana.sharepoint.com,6764a04e-2820-49f7-87c6-460bb716d51b,1e8bc8aa-29db-463b-958a-9564f0e2b951
+
+#        drives_resp = requests.get(f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives", headers=headers)
+#        print(drives_resp.json())
+#        drive_id = drives_resp.json()["id"]          #b!TqBkZyAo90mHxkYLtxbVG6rIix7bKTtGlYqVZPDiuVGl0FEjTV5wQJJdSf4OmGWZ
+#        folder_resp = requests.get(f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/General/Aplicaciones/Cadena%20de%20Suministro:/children", headers=headers)
+#        print(folder_resp.json())
+
+        # 2️⃣.2 Obtener metadata del archivo (para conseguir itemId)
+        file_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root:/{file_path}"
+        file_resp = requests.get(file_url, headers=headers)
+        file_resp.raise_for_status()
+        item_id = file_resp.json()["id"]
+
+        # 2️⃣.3 Descargar contenido del archivo
+        download_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{item_id}/content"
+        download_resp = requests.get(download_url, headers=headers)
+        download_resp.raise_for_status()
+
+        # 2️⃣.4 Cargarlo en memoria con openpyxl
+        wb = load_workbook(filename=BytesIO(download_resp.content), data_only=True)
 
         # 3️⃣ Leer Excel con openpyxl
-        wb = load_workbook(file_bytes, data_only=True)
+        #wb = load_workbook(file_bytes, data_only=True)
         ws = wb[nombre_hoja]
 
         # 4️⃣ Obtener la tabla por nombre
