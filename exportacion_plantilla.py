@@ -4,6 +4,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from copy import copy
 import requests
+from urllib.parse import quote
 
 def exportar_plantilla(bytes_data: bytes) -> BytesIO:
     
@@ -65,26 +66,33 @@ def exportar_plantilla(bytes_data: bytes) -> BytesIO:
 
 
 def subir_a_sharepoint(bytes_io: BytesIO, nombre_archivo: str, access_token: str) -> bool:
-    site_id = "saboraespana.sharepoint.com:/sites/departamento.ti"
-    drive_id = "b!Y2iXc4H7m3x8eF0z3K9Jt2v1L6gR5QW8x9y0Z1A2B3C4D5E6F7G8H9I0J1K2L3M4"
-    carpeta_path = "General/PoC Plantillas SaEGA"
+# 📌 Configuración
+    hostname = "saboraespana.sharepoint.com"
+    site_name = "departamento.ti"
+    carpeta_destino = "General/PoC Plantillas SaEGA"  # Ruta relativa dentro del sitio
 
-    try:
-        # Asegurarnos de que BytesIO está al inicio
-        bytes_io.seek(0)
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/octet-stream"
+    }
 
-        # Construir URL de subida
-        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{carpeta_path}/{nombre_archivo}:/content"
+    # 1️⃣ Obtener el siteId
+    site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site_name}"
+    site_resp = requests.get(site_url, headers=headers)
+    site_resp.raise_for_status()
+    site_id = site_resp.json()["id"]
 
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/octet-stream"
-        }
+    # 2️⃣ Subir el archivo al destino
+    # Construimos la ruta completa del archivo
+    ruta_archivo = f"{carpeta_destino}/{nombre_archivo}"
+    ruta_archivo = quote(ruta_archivo)
 
-        response = requests.put(url, headers=headers, data=bytes_io.read())
-        response.raise_for_status()
+    upload_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root:/{ruta_archivo}:/content"
+    upload_resp = requests.put(upload_url, headers=headers, data=bytes_io.getvalue())
 
+    # 3️⃣ Verificar resultado
+    if upload_resp.status_code in [200, 201]:
         return True
-    except Exception as e:
-        print(f"Error subiendo archivo a SharePoint: {e}")
+    else:
+        print("Error al subir:", upload_resp.text)
         return False

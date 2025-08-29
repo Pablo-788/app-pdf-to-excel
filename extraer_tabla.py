@@ -42,6 +42,7 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
 
     def extraer_tabla(pdf_stream):
         filas_resultado = []
+        filas_temporales = []
         tienda_detectada = ""
 
         with pdfplumber.open(pdf_stream) as pdf:
@@ -58,6 +59,18 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
                     match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
                     if match_tienda:
                         tienda_detectada = match_tienda.group(1)
+                        
+                    # Añadir todas las filas temporales con la tienda detectada
+                    for codigo, uds in filas_temporales:
+                        fila = [
+                            f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",
+                            codigo,
+                            "", uds, "", "", "", "", "", "001", "", "985"
+                        ]
+                        filas_resultado.append(fila)
+                    filas_temporales.clear()
+                    continue  # Ya procesamos esta línea
+
 
                     # 2️⃣ Buscar líneas que empiezan con código
                     match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
@@ -69,23 +82,9 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
                         uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
 
                         if codigo and uds:
-                            fila = [
-                                f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",  # Tienda
-                                codigo,      # Código
-                                "",          # Descripción
-                                uds,         # Cantidad
-                                "",          # Precio por unidad
-                                "",          # % de descuento
-                                "",          # Precio después del descuento
-                                "",          # Indicador de impuestos
-                                "",          # Total (ML)
-                                "001",       # Unidad de negocio
-                                "",          # Código de unidad de medida
-                                "985"        # Precio de coste Departamento
-                            ]
-                            filas_resultado.append(fila)
+                            filas_temporales.append((codigo, uds))
 
-        return filas_resultado, tienda_detectada
+        return filas_resultado   #, tienda_detectada
 
     def ordenar_lineas(df, orden_maestro):
         # Crear diccionario: código → posición en el orden maestro
@@ -105,7 +104,7 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
         "orden_maestro": []
     }
 
-    def obtener_orden_maestro(access_token, cache_tiempo_seg=5):
+    def obtener_orden_maestro(access_token, cache_tiempo_seg=180):
         hostname="saboraespana.sharepoint.com"
         site_name="DepartamentodeProducto"
         file_path="General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
@@ -176,7 +175,7 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
         return orden_maestro
 
     # ▶️ Ejecutar
-    filas, tienda_detectada = extraer_tabla(file_stream)
+    filas = extraer_tabla(file_stream)
     df = pd.DataFrame(filas, columns=COLUMNAS)
 
     # Aquí obtenemos el orden maestro desde SharePoint

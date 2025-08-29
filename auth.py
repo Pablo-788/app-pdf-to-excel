@@ -14,7 +14,9 @@ SCOPES       =  [
     "User.Read",          # Perfil básico del usuario
     "Files.Read",         # Leer archivos del usuario en OneDrive y SharePoint
     "Sites.Read.All",     # Leer cualquier sitio que el usuario pueda ver
-    "Files.Read.All"      # Leer todos los archivos de los usuarios a los que el usuario tiene acceso
+    "Files.Read.All",     # Leer todos los archivos de los usuarios a los que el usuario tiene acceso
+    "Files.ReadWrite",    # Leer y escribir archivos del usuario en OneDrive y SharePoint
+    "Sites.ReadWrite.All" # Leer y escribir en todos los sitios que el usuario puede ver
 ]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
