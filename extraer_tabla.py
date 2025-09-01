@@ -42,7 +42,6 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
 
     def extraer_tabla(pdf_stream):
         filas_resultado = []
-        filas_temporales = []
         tienda_detectada = ""
 
         with pdfplumber.open(pdf_stream) as pdf:
@@ -52,27 +51,17 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
                     continue
                 lineas = texto_pagina.split("\n")
 
+                # 1️⃣ Buscar tienda
                 for linea in lineas:
                     linea = linea.strip()
-
-                    # 1️⃣ Buscar tienda
                     match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
                     if match_tienda:
                         tienda_detectada = match_tienda.group(1)
-                        
-                    # Añadir todas las filas temporales con la tienda detectada
-                    for codigo, uds in filas_temporales:
-                        fila = [
-                            f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",
-                            codigo,
-                            "", uds, "", "", "", "", "", "001", "", "985"
-                        ]
-                        filas_resultado.append(fila)
-                    filas_temporales.clear()
-                    continue  # Ya procesamos esta línea
-
-
-                    # 2️⃣ Buscar líneas que empiezan con código
+                        break # Nos quedamos con el primer valor
+                
+                # 2️⃣ Buscar líneas que empiezan con código
+                for linea in lineas:
+                    linea = linea.strip()
                     match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
                     if match_codigo:
                         codigo = match_codigo.group(1)
@@ -82,19 +71,28 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
                         uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
 
                         if codigo and uds:
-                            filas_temporales.append((codigo, uds))
+                            fila = [
+                                f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",  # Tienda
+                                codigo,
+                                "", uds, "", "", "", "", "", "001", "", "985"
+                            ]
+                            filas_resultado.append(fila)
 
         return filas_resultado   #, tienda_detectada
 
-    def ordenar_lineas(df, orden_maestro):
-        # Crear diccionario: código → posición en el orden maestro
-        pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
+    def ordenar_lineas(df: pd.DataFrame, orden_maestro: list) -> pd.DataFrame:
+        # Asegurarse de trabajar con una copia
+        df = df.copy()
 
-        # Columna auxiliar con la posición, por defecto inf si no está en el maestro
-        df["orden_idx"] = df["Código"].map(lambda x: pos.get(x, float("inf")))
+        # Convertir la columna 'Código' a tipo Categorical con el orden maestro
+        # Los códigos que no estén en la lista se convertirán a NaN por defecto
+        df['Código'] = pd.Categorical(df['Código'], categories=orden_maestro, ordered=True)
 
-        # Ordenar según esa columna y eliminarla
-        df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
+        # Ordenar el DataFrame. Los valores NaN se ordenan al final por defecto.
+        df = df.sort_values('Código', na_position='last')
+
+        # Si se desea, se puede volver a convertir la columna a string
+        df['Código'] = df['Código'].astype(str)
 
         return df
     
