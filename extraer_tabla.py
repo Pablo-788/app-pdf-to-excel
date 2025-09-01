@@ -9,6 +9,8 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 import time
 import requests
 from urllib.parse import quote
+import streamlit as st
+from openpyxl.utils import get_column_letter
 
 # 📋 Columnas de salida
 COLUMNAS = ["Tienda",                # Relleno
@@ -25,41 +27,93 @@ COLUMNAS = ["Tienda",                # Relleno
     "Precio de coste Departamento"   # Vacío
 ]
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def obtener_orden_maestro_cached(access_token: str) -> list:
+    """Cached version of SharePoint master order retrieval"""
+    hostname="saboraespana.sharepoint.com"
+    site_name="DepartamentodeProducto"
+    file_path="General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
+    file_path = quote(file_path)
+    nombre_hoja = "SURFACE"
+    nombre_tabla = "OrdenPreparacion"
+    columna_codigos = "SKU"
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Get siteId
+    site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site_name}"
+    site_resp = requests.get(site_url, headers=headers)
+    site_resp.raise_for_status()
+    site_id = site_resp.json()["id"]
+
+    # Download file
+    file_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root:/{file_path}:/content"
+    file_resp = requests.get(file_url, headers=headers)
+    file_resp.raise_for_status()
+
+    # Load with openpyxl
+    wb = load_workbook(filename=BytesIO(file_resp.content), data_only=True)
+    ws = wb[nombre_hoja]
+    tabla = ws.tables[nombre_tabla]
+    ref = tabla.ref
+    rango = ws[ref]
+
+    # Convert to DataFrame
+    contenido = [[celda.value for celda in fila] for fila in rango]
+    df_maestro = pd.DataFrame(contenido[1:], columns=contenido[0])
+
+    # Extract and normalize codes
+    orden_maestro = (
+        df_maestro[columna_codigos]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .str.lstrip("0")
+        .tolist()
+    )
+
+    return orden_maestro
+
 def procesar_pdf(file_stream, nombre_pdf, sesion):
     NOMBRE_BASE = os.path.splitext(nombre_pdf)[0]
 
-    # 📥 Extraer valores desde la primera tabla real del PDF
-    with pdfplumber.open(file_stream) as pdf:
+    # 📥 Extract values from first table - optimized single read
+    pdf_content = file_stream.read()
+    file_stream.seek(0)  # Reset for later use
+    
+    with pdfplumber.open(BytesIO(pdf_content)) as pdf:
         primera_pagina = pdf.pages[0]
         tablas = primera_pagina.extract_tables()
 
         try:
-            valores = tablas[0][1]  # Fila de datos (segunda fila)
+            valores = tablas[0][1]
             valor_pedido = valores[1]
         except Exception as e:
             print("⚠️ Error al extraer datos de la tabla:", e)
             valor_pedido = "PEDIDO_NO_ENCONTRADO"
 
-    def extraer_tabla(pdf_stream):
+    def extraer_tabla(pdf_bytes):
         filas_resultado = []
         filas_temporales = []
         tienda_detectada = ""
 
-        with pdfplumber.open(pdf_stream) as pdf:
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            all_text = ""
             for pagina in pdf.pages:
                 texto_pagina = pagina.extract_text()
-                if not texto_pagina:
-                    continue
-                lineas = texto_pagina.split("\n")
+                if texto_pagina:
+                    all_text += texto_pagina + "\n"
+            
+            lineas = all_text.split("\n")
+            
+            for linea in lineas:
+                linea = linea.strip()
 
-                for linea in lineas:
-                    linea = linea.strip()
-
-                    # 1️⃣ Buscar tienda
-                    match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
-                    if match_tienda:
-                        tienda_detectada = match_tienda.group(1)
-                        
+                # 1️⃣ Buscar tienda
+                match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
+                if match_tienda:
+                    tienda_detectada = match_tienda.group(1)
+                    
                     # Añadir todas las filas temporales con la tienda detectada
                     for codigo, uds in filas_temporales:
                         fila = [
@@ -69,167 +123,59 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
                         ]
                         filas_resultado.append(fila)
                     filas_temporales.clear()
-                    continue  # Ya procesamos esta línea
+                    continue
 
+                # 2️⃣ Buscar líneas que empiezan con código
+                match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
+                if match_codigo:
+                    codigo = match_codigo.group(1)
 
-                    # 2️⃣ Buscar líneas que empiezan con código
-                    match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
-                    if match_codigo:
-                        codigo = match_codigo.group(1)
+                    # 3️⃣ Buscar unidades tipo "6,000" en la línea
+                    partes = linea.split()
+                    uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
 
-                        # 3️⃣ Buscar unidades tipo "6,000" en la línea
-                        partes = linea.split()
-                        uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
+                    if codigo and uds:
+                        filas_temporales.append((codigo, uds))
 
-                        if codigo and uds:
-                            filas_temporales.append((codigo, uds))
-
-        return filas_resultado   #, tienda_detectada
+        return filas_resultado
 
     def ordenar_lineas(df, orden_maestro):
-        # Crear diccionario: código → posición en el orden maestro
         pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
-
-        # Columna auxiliar con la posición, por defecto inf si no está en el maestro
-        df["orden_idx"] = df["Código"].map(lambda x: pos.get(x, float("inf")))
-
-        # Ordenar según esa columna y eliminarla
+        df["orden_idx"] = df["Código"].map(pos).fillna(float("inf"))
         df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
-
         return df
-    
-    # Variable de caché a nivel de función
-    _cache_orden_maestro = {
-        "timestamp": 0,
-        "orden_maestro": []
-    }
 
-    def obtener_orden_maestro(access_token, cache_tiempo_seg=180):
-        hostname="saboraespana.sharepoint.com"
-        site_name="DepartamentodeProducto"
-        file_path="General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
-        file_path = quote(file_path)
-        nombre_hoja = "SURFACE"
-        nombre_tabla = "OrdenPreparacion"
-        columna_codigos = "SKU"
-
-        nonlocal _cache_orden_maestro
-        ahora = time.time()
-
-        # 1️⃣ Revisar si la cache sigue vigente
-        if ahora - _cache_orden_maestro["timestamp"] < cache_tiempo_seg:
-            return _cache_orden_maestro["orden_maestro"]
-
-        # 2️⃣ Descargar el archivo de SharePoint en memoria
-        """
-        Descarga un archivo Excel desde SharePoint y lo devuelve como objeto openpyxl.Workbook.
-
-        :param access_token: Token OAuth2 obtenido con MSAL
-        :param hostname: dominio del SharePoint (ej: 'contoso.sharepoint.com')
-        :param site_name: nombre del sitio (ej: 'MiProyecto')
-        :param file_path: ruta al archivo dentro de la biblioteca (ej: 'Carpeta/archivo.xlsx')
-        :return: objeto openpyxl.Workbook
-        """
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        # 2️⃣.1 Obtener siteId
-        site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site_name}"
-        site_resp = requests.get(site_url, headers=headers)
-        site_resp.raise_for_status()
-        site_id = site_resp.json()["id"]
-
-        # 2️⃣.2 Obtener metadata del archivo (para conseguir itemId)
-        file_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root:/{file_path}:/content"
-        file_resp = requests.get(file_url, headers=headers)
-        file_resp.raise_for_status()
-
-        # 2️⃣.4 Cargarlo en memoria con openpyxl
-        wb = load_workbook(filename=BytesIO(file_resp.content), data_only=True)
-
-        # 3️⃣ Leer Excel con openpyxl
-        ws = wb[nombre_hoja]
-
-        # 4️⃣ Obtener la tabla por nombre
-        tabla = ws.tables[nombre_tabla]
-        ref = tabla.ref  # Ejemplo: "A1:C200"
-        rango = ws[ref]
-
-        # 5️⃣ Convertir a DataFrame con pandas (igual que antes, pero solo ese rango)
-        contenido = [[celda.value for celda in fila] for fila in rango]
-        df_maestro = pd.DataFrame(contenido[1:], columns=contenido[0])
-
-        # 6️⃣ Extraer columna de códigos y normalizar
-        orden_maestro = (
-            df_maestro[columna_codigos]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .str.lstrip("0")
-            .tolist()
-        )
-
-        # 7️⃣ Actualizar cache
-        _cache_orden_maestro["timestamp"] = ahora
-        _cache_orden_maestro["orden_maestro"] = orden_maestro
-
-        return orden_maestro
-
-    # ▶️ Ejecutar
-    filas = extraer_tabla(file_stream)
+    # ▶️ Execute with optimizations
+    filas = extraer_tabla(pdf_content)
     df = pd.DataFrame(filas, columns=COLUMNAS)
 
-    # Aquí obtenemos el orden maestro desde SharePoint
-    orden_maestro = obtener_orden_maestro(sesion)
-
-    # Aquí llamas a ordenar_lineas
+    orden_maestro = obtener_orden_maestro_cached(sesion)
     df = ordenar_lineas(df, orden_maestro)
 
-    # 🧾 Guardar Excel en memoria
     output = BytesIO()
-    df.to_excel(output, index=False, sheet_name="Datos")
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Datos")
+        
+        # Add table formatting
+        workbook = writer.book
+        worksheet = writer.sheets["Datos"]
+        
+        ultima_fila = len(df) + 1
+        ultima_columna = len(COLUMNAS)
+        letra_ultima_columna = get_column_letter(ultima_columna)
+        rango_tabla = f"A1:{letra_ultima_columna}{ultima_fila}"
+
+        tabla = Table(displayName="TablaDatos", ref=rango_tabla)
+        estilo = TableStyleInfo(
+            name="TableStyleMedium9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False
+        )
+        tabla.tableStyleInfo = estilo
+        worksheet.add_table(tabla)
+
     output.seek(0)
-
-    wb_tabla = load_workbook(output)
-    ws_tabla = wb_tabla["Datos"]
-
-    # Definir rango de la tabla
-    ultima_fila = ws_tabla.max_row
-    ultima_columna = ws_tabla.max_column
-    letra_ultima_columna = ws_tabla.cell(row=1, column=ultima_columna).column_letter
-    rango_tabla = f"A1:{letra_ultima_columna}{ultima_fila}"
-
-    tabla = Table(displayName="TablaDatos", ref=rango_tabla)
-    estilo = TableStyleInfo(
-        name="TableStyleMedium9",
-        showFirstColumn=False,
-        showLastColumn=False,
-        showRowStripes=True,
-        showColumnStripes=False
-    )
-    tabla.tableStyleInfo = estilo
-    ws_tabla.add_table(tabla)
-
-    # Guardamos el Excel con tabla en memoria
-    output_tabla = BytesIO()
-    wb_tabla.save(output_tabla)
-    output_tabla.seek(0)
-
-    '''
-    # Reabrimos el archivo en memoria
-    wb = load_workbook(output_tabla)
-    ws = wb["Datos"]
-
-    # Escribimos el resumen en una celda fuera de la tabla
-    ultima_fila = ws.max_row
-    resumen_texto = f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}"
-    ws.cell(row=ultima_fila + 2, column=1).value = resumen_texto
-
-    # Guardamos los cambios en un nuevo BytesIO
-    nuevo_output = BytesIO()
-    wb.save(nuevo_output)
-    nuevo_output.seek(0)
-    '''
-
     nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
-
-    return output_tabla, nombre_final
+    return output, nombre_final
