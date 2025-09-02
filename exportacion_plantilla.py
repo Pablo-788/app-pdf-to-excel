@@ -1,16 +1,8 @@
 # exportacion_plantilla.py
 from io import BytesIO
-from typing import Optional, Sequence, Tuple
-import pandas as pd
-from copy import copy
 import requests
 from urllib.parse import quote
 import os
-
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
-from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
-
 
 try:
     # openpyxl >= 3.1 (para desplazar fórmulas al copiar)

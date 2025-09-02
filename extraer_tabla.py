@@ -27,52 +27,77 @@ COLUMNAS = ["Tienda",                # Relleno
     "Precio de coste Departamento"   # Vacío
 ]
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300)  # El caché sigue siendo útil para evitar llamadas repetidas a la API
 def obtener_orden_maestro_cached(access_token: str) -> list:
-    """Cached version of SharePoint master order retrieval"""
-    hostname="saboraespana.sharepoint.com"
-    site_name="DepartamentodeProducto"
-    file_path="General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
-    file_path = quote(file_path)
+    """
+    Versión optimizada que lee solo la columna necesaria de la tabla en SharePoint
+    usando la API de Microsoft Graph, sin descargar el archivo Excel completo.
+    """
+    hostname = "saboraespana.sharepoint.com"
+    site_name = "DepartamentodeProducto"
+    file_path = "General/Aplicaciones/Cadena de Suministro/Herramienta de Aprovisionamiento v1.0.2.xlsx"
     nombre_hoja = "SURFACE"
     nombre_tabla = "OrdenPreparacion"
     columna_codigos = "SKU"
 
     headers = {"Authorization": f"Bearer {access_token}"}
+    
+    # URL base para las llamadas a la API de Graph
+    graph_url = "https://graph.microsoft.com/v1.0"
 
-    # Get siteId
-    site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site_name}"
-    site_resp = requests.get(site_url, headers=headers)
-    site_resp.raise_for_status()
-    site_id = site_resp.json()["id"]
+    try:
+        # 1. Obtener siteId
+        site_url = f"{graph_url}/sites/{hostname}:/sites/{site_name}"
+        site_resp = requests.get(site_url, headers=headers)
+        site_resp.raise_for_status()
+        site_id = site_resp.json()["id"]
 
-    # Download file
-    file_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root:/{file_path}:/content"
-    file_resp = requests.get(file_url, headers=headers)
-    file_resp.raise_for_status()
+        # 2. Obtener driveItemId del archivo
+        # La ruta debe estar codificada para la URL, pero sin codificar las barras '/'
+        file_path_encoded = quote(file_path, safe='')
+        item_url = f"{graph_url}/sites/{site_id}/drive/root:/{file_path_encoded}"
+        item_resp = requests.get(item_url, headers=headers)
+        item_resp.raise_for_status()
+        item_id = item_resp.json()["id"]
 
-    # Load with openpyxl
-    wb = load_workbook(filename=BytesIO(file_resp.content), data_only=True)
-    ws = wb[nombre_hoja]
-    tabla = ws.tables[nombre_tabla]
-    ref = tabla.ref
-    rango = ws[ref]
+        # 3. Leer directamente el rango de la columna de la tabla
+        # Esta es la llamada clave que evita la descarga del archivo
+        column_data_url = (
+            f"{graph_url}/sites/{site_id}/drive/items/{item_id}/workbook/tables('{nombre_tabla}')"
+            f"/columns('{columna_codigos}')/range"
+        )
+        
+        # Usamos $select para pedir solo el campo 'values' y reducir la respuesta
+        params = {"$select": "values"}
+        data_resp = requests.get(column_data_url, headers=headers, params=params)
+        data_resp.raise_for_status()
+        
+        # El resultado es un JSON con una matriz de valores
+        # [['SKU'], ['12345'], ['67890'], [''], ...]
+        json_data = data_resp.json()
+        values = json_data.get("values", [])
 
-    # Convert to DataFrame
-    contenido = [[celda.value for celda in fila] for fila in rango]
-    df_maestro = pd.DataFrame(contenido[1:], columns=contenido[0])
+        # 4. Procesar la lista de códigos directamente desde el JSON
+        if not values or len(values) < 2:  # Si no hay datos o solo la cabecera
+            return []
 
-    # Extract and normalize codes
-    orden_maestro = (
-        df_maestro[columna_codigos]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .str.lstrip("0")
-        .tolist()
-    )
+        # Omitimos la primera fila (cabecera) y procesamos el resto
+        orden_maestro = [
+            str(row[0]).strip().lstrip("0")
+            for row in values[1:]
+            if row and row[0] is not None and str(row[0]).strip()
+        ]
 
-    return orden_maestro
+        return orden_maestro
+
+    except requests.exceptions.RequestException as e:
+        # Manejo de errores de red o de la API
+        st.error(f"Error al contactar con la API de Microsoft Graph: {e}")
+        return []
+    except (KeyError, IndexError) as e:
+        # Manejo de errores por respuesta inesperada del JSON
+        st.error(f"Error al procesar la respuesta de la API (estructura inesperada): {e}")
+        return []
 
 def procesar_pdf(file_stream, nombre_pdf, sesion):
     NOMBRE_BASE = os.path.splitext(nombre_pdf)[0]
