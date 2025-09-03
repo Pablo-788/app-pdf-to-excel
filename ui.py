@@ -1,13 +1,11 @@
 import base64
 import streamlit as st
 import logging
-from auth import iniciar_autenticacion, procesar_callback, cerrar_sesion
+from auth import iniciar_autenticacion, cerrar_sesion
 from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
-from exportacion_plantilla import exportar_directo_excel_com, subir_a_sharepoint
 from io import BytesIO
-
 from exportacion_plantilla import (
     limpiar_entradas_com,
     exportar_directo_excel_com,
@@ -24,8 +22,6 @@ def init_state():
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
-
-
 
 
 RUTA_PLANTILLA = "SaeGA v2.0.2 - Plantilla - copia para Importador de Pedidos - copia.xlsm"

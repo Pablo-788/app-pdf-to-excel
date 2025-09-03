@@ -3,25 +3,14 @@ from io import BytesIO
 import requests
 from urllib.parse import quote
 import os
-
-try:
-    # openpyxl >= 3.1 (para desplazar fórmulas al copiar)
-    from openpyxl.formula.translate import Translator
-except Exception:
-    Translator = None
-
-
-# ---- Ajusta esto si quieres un path por defecto para tu .xlsm local ----
-RUTA_PLANTILLA_POR_DEFECTO = "SaeGA v2.0.2 - Plantilla - copia para Importador de Pedidos - copia.xlsm"
-
+import pandas as pd
 # COM de Excel
 import pythoncom
 import win32com.client as win32
 
 
-def _as_2d(col_values):
-    return [[v] for v in col_values]  # para asignación masiva COM
-
+# ---- Ajusta esto si quieres un path por defecto para tu .xlsm local ----
+RUTA_PLANTILLA_POR_DEFECTO = "SaeGA v2.0.2 - Plantilla - copia para Importador de Pedidos - copia.xlsm"
 
 def limpiar_entradas_com(
     ruta_excel: str,
@@ -108,9 +97,6 @@ def exportar_directo_excel_com(
     columnas_df = ("Tienda", "Código", "Cantidad"),
     modo: str = "sobrescribir"
 ) -> None:
-    import os, pythoncom
-    import pandas as pd
-    import win32com.client as win32
 
     df = pd.read_excel(BytesIO(bytes_data)).copy()
     for col in columnas_df:

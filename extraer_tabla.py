@@ -1,11 +1,9 @@
 from io import BytesIO
-import json
 import pdfplumber
 import pandas as pd
 import os
 import re
 from openpyxl.worksheet.table import Table, TableStyleInfo
-import time
 import requests
 from urllib.parse import quote
 import streamlit as st
@@ -97,9 +95,18 @@ def obtener_orden_maestro_cached(access_token: str) -> list:
         # Manejo de errores por respuesta inesperada del JSON
         st.error(f"Error al procesar la respuesta de la API (estructura inesperada): {e}")
         return []
+    
+
+def ordenar_lineas(df, orden_maestro):
+    pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
+    df["orden_idx"] = df["Código"].map(pos).fillna(float("inf"))
+    df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
+    return df
+
 
 def procesar_pdf(file_stream, nombre_pdf, sesion):
     NOMBRE_BASE = os.path.splitext(nombre_pdf)[0]
+    filas_resultado = []
 
     # 📥 Extract values from first table - optimized single read
     pdf_content = file_stream.read()
@@ -108,70 +115,23 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
     with pdfplumber.open(BytesIO(pdf_content)) as pdf:
         primera_pagina = pdf.pages[0]
         tablas = primera_pagina.extract_tables()
-
         try:
             valores = tablas[0][1]
             valor_pedido = valores[1]
         except Exception as e:
             print("⚠️ Error al extraer datos de la tabla:", e)
             valor_pedido = "PEDIDO_NO_ENCONTRADO"
-
-    def extraer_tabla(pdf_bytes):
-        filas_resultado = []
-        filas_temporales = []
-        tienda_detectada = ""
-
-        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-            all_text = ""
-            for pagina in pdf.pages:
-                texto_pagina = pagina.extract_text()
-                if texto_pagina:
-                    all_text += texto_pagina + "\n"
             
-            lineas = all_text.split("\n")
-            
-            for linea in lineas:
-                linea = linea.strip()
-
-                # 1️⃣ Buscar tienda
-                match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
-                if match_tienda:
-                    tienda_detectada = match_tienda.group(1)
-                    
-                    # Añadir todas las filas temporales con la tienda detectada
-                    for codigo, uds in filas_temporales:
-                        fila = [
-                            f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",
-                            codigo,
-                            "", uds, "", "", "", "", "", "001", "", "985"
-                        ]
-                        filas_resultado.append(fila)
-                    filas_temporales.clear()
-                    continue
-
-                # 2️⃣ Buscar líneas que empiezan con código
-                match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
-                if match_codigo:
-                    codigo = match_codigo.group(1)
-
-                    # 3️⃣ Buscar unidades tipo "6,000" en la línea
-                    partes = linea.split()
-                    uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
-
-                    if codigo and uds:
-                        filas_temporales.append((codigo, uds))
-
-        return filas_resultado
-
-    def ordenar_lineas(df, orden_maestro):
-        pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
-        df["orden_idx"] = df["Código"].map(pos).fillna(float("inf"))
-        df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
-        return df
-
-    # ▶️ Execute with optimizations
-    filas = extraer_tabla(pdf_content)
-    df = pd.DataFrame(filas, columns=COLUMNAS)
+     # ▶️ Execute with optimizations
+    filas_temporales, tienda_detectada = extraer_tabla(pdf_content)
+    for codigo, uds in filas_temporales:
+        fila = [
+            f"PEDIDO PC{valor_pedido} TIENDA {tienda_detectada}",
+                codigo,
+                "", uds, "", "", "", "", "", "001", "", "985"
+            ]
+        filas_resultado.append(fila)
+    df = pd.DataFrame(filas_resultado, columns=COLUMNAS)
 
     orden_maestro = obtener_orden_maestro_cached(sesion)
     df = ordenar_lineas(df, orden_maestro)
@@ -180,8 +140,6 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name="Datos")
         
-        # Add table formatting
-        workbook = writer.book
         worksheet = writer.sheets["Datos"]
         
         ultima_fila = len(df) + 1
@@ -200,6 +158,43 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
         tabla.tableStyleInfo = estilo
         worksheet.add_table(tabla)
 
-    output.seek(0)
-    nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
-    return output, nombre_final
+        output.seek(0)
+        nombre_final = f"Factura_{NOMBRE_BASE}.xlsx".replace(" ", "_")
+        return output, nombre_final
+    
+def extraer_tabla(pdf_bytes):
+    filas_temporales = []
+    tienda_detectada = ""
+
+    with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+        all_text = ""
+        for pagina in pdf.pages:
+            texto_pagina = pagina.extract_text()
+            if texto_pagina:
+                all_text += texto_pagina + "\n"
+            
+        lineas = all_text.split("\n")
+        
+        for linea in lineas:
+            linea = linea.strip()
+
+            # 1️⃣ Buscar tienda
+            match_tienda = re.search(r"TIENDA\s+(\d+)", linea.upper())
+            if match_tienda:
+                tienda_detectada = match_tienda.group(1)
+
+            # 2️⃣ Buscar líneas que empiezan con código
+            match_codigo = re.match(r"^(\d+)\s+(.*)", linea)
+            if match_codigo:
+                codigo = match_codigo.group(1)
+
+                # 3️⃣ Buscar unidades tipo "6,000" en la línea
+                partes = linea.split()
+                uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
+
+                if codigo and uds:
+                    filas_temporales.append((codigo, uds))
+
+        return filas_temporales, tienda_detectada
+
+
