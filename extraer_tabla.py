@@ -190,7 +190,10 @@ def extraer_tabla(pdf_bytes):
 
                 # 3️⃣ Buscar unidades tipo "6,000" en la línea
                 partes = linea.split()
+                uds = ''
                 uds = next((p for p in partes if re.match(r"^\d+,\d{3}$", p)), None)
+                if uds is not None:
+                    uds = uds.split(",")[0]
 
                 if codigo and uds:
                     filas_temporales.append((codigo, uds))
