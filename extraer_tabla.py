@@ -4,7 +4,6 @@ import pdfplumber
 import pandas as pd
 import os
 import re
-from openpyxl import load_workbook
 from openpyxl.worksheet.table import Table, TableStyleInfo
 import time
 import requests
@@ -22,9 +21,9 @@ COLUMNAS = ["Tienda",                # Relleno
     "Precio después del descuento",  # Vacío
     "Indicador de impuestos",        # Vacío
     "Total (ML)",                    # Vacío
-    "Unidad de negocio",             # Vacío
+    "Unidad de negocio",             # Fijo "001"
     "Código de unidad de medida",    # Vacío
-    "Precio de coste Departamento"   # Vacío
+    "Precio de coste Departamento"   # Fijo "985"
 ]
 
 @st.cache_data(ttl=300)  # El caché sigue siendo útil para evitar llamadas repetidas a la API
