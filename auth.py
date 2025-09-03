@@ -9,8 +9,15 @@ load_dotenv()
 CLIENT_ID  = os.getenv("CLIENT_ID")
 TENANT_ID  = os.getenv("TENANT_ID")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "https://pedidos-et-saetech.onrender.com/"
-SCOPES       = ["User.Read"]
+REDIRECT_URI = "http://localhost:8501/"
+SCOPES       =  [
+    "User.Read",          # Perfil básico del usuario
+    "Files.Read",         # Leer archivos del usuario en OneDrive y SharePoint
+    "Sites.Read.All",     # Leer cualquier sitio que el usuario pueda ver
+    "Files.Read.All",     # Leer todos los archivos de los usuarios a los que el usuario tiene acceso
+    "Files.ReadWrite",    # Leer y escribir archivos del usuario en OneDrive y SharePoint
+    "Sites.ReadWrite.All" # Leer y escribir en todos los sitios que el usuario puede ver
+]
 ALLOWED_GROUP_ID = os.getenv("ALLOWED_GROUP_ID")
 
 def get_msal_app():
@@ -20,19 +27,6 @@ def get_msal_app():
             CLIENT_ID, authority=AUTHORITY
         )
     return st.session_state.msal_app
-
-# ---------- Helper ----------
-def abrir_en_nueva_pestana(url: str):
-    """Abre la URL en un tab secundario."""
-    components.html(
-        f"""
-        <script>
-            window.open("{url}", "_blank");
-        </script>
-        """,
-        height=0,
-        width=0
-    )
 
 # ---------- Flujo MSAL ----------
 def iniciar_autenticacion() -> str:
@@ -45,10 +39,6 @@ def iniciar_autenticacion() -> str:
 
 def procesar_callback() -> bool:
     msal_app = get_msal_app()
-    """
-    Si la URL trae ?code=..., lo intercambia por un access_token.
-    Cierra la pestaña hija y recarga la principal.
-    """
     if "access_token" in st.session_state or "code" not in st.query_params:
         return False
 
@@ -74,16 +64,6 @@ def procesar_callback() -> bool:
         st.session_state.access_token = result["access_token"]
         st.session_state.user_info    = user_claims
 
-        # --- cerrar la pestaña (si es hija) ---
-        components.html(
-            """
-            <script>
-                window.close();
-            </script>
-            """,
-            height=0,
-            width=0
-        )
         # Limpiar parámetros y recargar la app principal
         st.query_params.clear()
         st.rerun()

@@ -5,6 +5,25 @@ from auth import iniciar_autenticacion, procesar_callback, cerrar_sesion
 from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
+from io import BytesIO
+from exportacion_plantilla import (
+    limpiar_entradas_com,
+    exportar_directo_excel_com,
+    subir_a_sharepoint
+)
+
+def init_state():
+    defaults = {
+        "last_pdf_key": None,            # identifica si el PDF es nuevo
+        "export_done": False,            # ya se volcó a Excel este PDF
+        "excel_final_bytes": None,       # bytes del xlsm actualizado para descargar
+        "uploaded_to_sharepoint": False  # ya se subió a SharePoint
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+RUTA_PLANTILLA = "SaeGA v2.0.2 - Plantilla - copia para Importador de Pedidos - copia.xlsm"
 
 APP_TITLE   = "Convertidor Pedidos ET → Excel"
 APP_VERSION = "0.3.16"
@@ -231,13 +250,13 @@ def mostrar_login():
                 </a>
             </div>
             """,
-            unsafe_allow_html=True
-        )
+            unsafe_allow_html=True)
 
     render_footer()
 
 def mostrar_aplicacion():
     inject_styles()
+    init_state()
 
     render_header()  
 
@@ -247,12 +266,21 @@ def mostrar_aplicacion():
         type=["pdf"],
         help="Sube un PDF que contenga tablas con productos y la etiqueta 'TIENDA'."
     )
+        # Después de leer pdf_file del uploader:
+    if pdf_file is not None:
+        pdf_key = f"{pdf_file.name}-{getattr(pdf_file, 'size', 0)}"
+        if st.session_state.last_pdf_key != pdf_key:
+            st.session_state.last_pdf_key = pdf_key
+            st.session_state.export_done = False
+            st.session_state.excel_final_bytes = None
+            st.session_state.uploaded_to_sharepoint = False
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     if pdf_file is not None:
         with st.spinner("Extrayendo datos, dame unos segundos…"):
             try:
-                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name)
+                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name, st.session_state.access_token)
 
                 output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
                 bytes_data = output_excel.getvalue()  # guardamos el contenido en memoria
@@ -260,6 +288,7 @@ def mostrar_aplicacion():
 
                 st.success("✅ ¡PDF procesado!")
 
+                '''                
                 col6, col7, col8 = st.columns([1, 1, 1])
                 with col7:
                     st.download_button(
@@ -269,6 +298,7 @@ def mostrar_aplicacion():
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary"
                     )
+                '''
 
             except Exception as e:
                 st.error("❌ Error al procesar el PDF.")
@@ -287,5 +317,79 @@ def mostrar_aplicacion():
                 except Exception as e:
                     st.warning("⚠️ No se pudo mostrar la vista previa de los datos.")
                     logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
+
+
+            numero_usuario = st.text_input(
+                "Introduce un número de 6 dígitos para nombre de la plantilla de SaEGA",
+                max_chars=6
+            )
+
+            # Validación del input
+            if numero_usuario:
+                if not numero_usuario.isdigit() or len(numero_usuario) != 6:
+                    st.warning("⚠️ Debes introducir exactamente 6 números.")
+                    numero_usuario = None  # invalidar para que no continue
+
+            if 'bytes_data' in locals() and bytes_data and numero_usuario:
+                try:
+                    if not st.session_state.get("export_done"):
+                        with st.spinner("Limpiando plantilla…"):
+                            # Limpia A/B/C desde fila 3. Si quieres dejar sólo 1 fila en la tabla: ajustar_filas=True
+                            limpiar_entradas_com(
+                                RUTA_PLANTILLA,
+                                hoja="Pedidos",
+                                nombre_tabla="tblPedidos",
+                                fila_inicio=3,
+                                col_tienda="A", col_referencia="B", col_unidades="C",
+                                ajustar_filas=True 
+                            )
+
+
+                        with st.spinner("Volcando datos en la plantilla local…"):
+                            exportar_directo_excel_com(
+                                RUTA_PLANTILLA,
+                                bytes_data,
+                                hoja="Pedidos",
+                                nombre_tabla="tblPedidos",
+                                fila_inicio=3,
+                                col_tienda="A", col_referencia="B", col_unidades="C",
+                                columnas_df=("Tienda", "Código", "Cantidad"),
+                                modo="sobrescribir"
+                            )
+
+                        # Guarda bytes para reusar en descargas posteriores (sin re-escribir)
+                        with open(RUTA_PLANTILLA, "rb") as f:
+                            st.session_state.excel_final_bytes = f.read()
+                        st.session_state.export_done = True
+
+                    plantilla_bytes = st.session_state.excel_final_bytes
+                    file_name_final = f"{numero_usuario} - SaeGA.xlsm"
+
+                    # Subir a SharePoint con los bytes ya guardados (no re-escribe)
+                    exito = subir_a_sharepoint(BytesIO(plantilla_bytes), file_name_final, st.session_state.access_token)
+                    if exito:
+                        st.success("✅ Archivo subido correctamente a SharePoint")
+                    else:
+                        st.error("❌ No se pudo subir el archivo a SharePoint")
+
+                    # Descargar (sin re-escribir)
+                    col6, col7, col8 = st.columns([1, 1, 1])
+                    with col7:
+                        st.download_button(
+                            "📥 Descargar Plantilla de SaEGA",
+                            data=plantilla_bytes,
+                            file_name=file_name_final,
+                            mime="application/vnd.ms-excel.sheet.macroEnabled.12",
+                            type="primary",
+                            key=f"dl_{st.session_state.last_pdf_key}"  # evita colisiones de botón
+                        )
+
+                    st.info("Listo. Si subes otro PDF, se limpiará y volverá a volcar de cero.")
+
+                except Exception as e:
+                    st.error("❌ Error al escribir en la plantilla local.")
+                    with st.expander("Detalles del error"):
+                        st.code(str(e))
+                    logging.exception(f"[{datetime.now()}] Error en exportación plantilla in-place: {e}")
 
     render_footer()
