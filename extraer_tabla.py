@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import re
 from openpyxl.worksheet.table import Table, TableStyleInfo
+import time
 import requests
 from urllib.parse import quote
 import streamlit as st
@@ -163,11 +164,10 @@ def procesar_pdf(file_stream, nombre_pdf, sesion):
         return filas_resultado
 
     def ordenar_lineas(df, orden_maestro):
-      df = df.copy()
-      df['Código'] = pd.Categorical(df['Código'], categories=orden_maestro, ordered=True)
-      df = df.sort_values('Código', na_position='last')
-      df['Código'] = df['Código'].astype(str)
-      return df
+        pos = {codigo: i for i, codigo in enumerate(orden_maestro)}
+        df["orden_idx"] = df["Código"].map(pos).fillna(float("inf"))
+        df = df.sort_values("orden_idx").drop(columns=["orden_idx"])
+        return df
 
     # ▶️ Execute with optimizations
     filas = extraer_tabla(pdf_content)

@@ -1,10 +1,8 @@
+# exportacion_plantilla.py
 from io import BytesIO
 import requests
 from urllib.parse import quote
 import os
-import pythoncom
-import win32com.client as win32
-import pandas as pd
 
 try:
     # openpyxl >= 3.1 (para desplazar fórmulas al copiar)
@@ -15,6 +13,11 @@ except Exception:
 
 # ---- Ajusta esto si quieres un path por defecto para tu .xlsm local ----
 RUTA_PLANTILLA_POR_DEFECTO = "SaeGA v2.0.2 - Plantilla - copia para Importador de Pedidos - copia.xlsm"
+
+# COM de Excel
+import pythoncom
+import win32com.client as win32
+
 
 def _as_2d(col_values):
     return [[v] for v in col_values]  # para asignación masiva COM
@@ -105,6 +108,9 @@ def exportar_directo_excel_com(
     columnas_df = ("Tienda", "Código", "Cantidad"),
     modo: str = "sobrescribir"
 ) -> None:
+    import os, pythoncom
+    import pandas as pd
+    import win32com.client as win32
 
     df = pd.read_excel(BytesIO(bytes_data)).copy()
     for col in columnas_df:
