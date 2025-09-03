@@ -174,30 +174,6 @@ def exportar_directo_excel_com(
             xl.Quit()
         pythoncom.CoUninitialize()
 
-
-def exportar_plantilla(
-    bytes_data: bytes,
-    ruta_excel: str = RUTA_PLANTILLA_POR_DEFECTO,
-    **kwargs
-) -> BytesIO:
-    """
-    Wrapper compatible con tu UI anterior:
-      - Escribe en el .xlsm local (ruta_excel) usando exportar_directo_excel(...)
-      - Devuelve el .xlsm actualizado como BytesIO para descargar/subir.
-    """
-    exportar_directo_excel_com(ruta_excel, bytes_data, **kwargs)
-    return leer_plantilla_actualizada(ruta_excel)
-
-
-def leer_plantilla_actualizada(ruta_excel: str) -> BytesIO:
-    """Lee el .xlsm ya actualizado y devuelve un BytesIO listo para descargar/subir."""
-    with open(ruta_excel, "rb") as f:
-        data = f.read()
-    bio = BytesIO(data)
-    bio.seek(0)
-    return bio
-
-
 def subir_a_sharepoint(
     bytes_io: BytesIO,
     nombre_archivo: str,

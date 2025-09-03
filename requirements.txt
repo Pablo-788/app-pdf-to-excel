@@ -1,6 +1,7 @@
-streamlit
-pdfplumber
-pandas
-openpyxl
-msal
-python-dotenv
+streamlit==1.49.0
+pdfplumber==0.11.7
+pandas==2.3.2
+openpyxl==3.1.5
+msal==1.33.0
+python-dotenv==1.1.1
+pywin32==311
