@@ -5,160 +5,120 @@ from urllib.parse import quote
 import os
 import pandas as pd
 # COM de Excel
-import pythoncom
-import win32com.client as win32
+import xlwings as xw
 
 
 # ---- Ajusta esto si quieres un path por defecto para tu .xlsm local ----
 RUTA_PLANTILLA_POR_DEFECTO = "SaeGA v2.0.2 - Plantilla - copia para Importador de Pedidos - copia.xlsm"
 
-def limpiar_entradas_com(
+def limpiar_entradas_xlwings(
     ruta_excel: str,
     hoja: str = "Pedidos",
     nombre_tabla: str = "tblPedidos",
-    fila_inicio: int = 3,      # A3/B3/C3
-    col_tienda: str = "A",
-    col_referencia: str = "B",
-    col_unidades: str = "C",
-    ajustar_filas: bool = False  # si True, borra filas sobrantes de la tabla (deja 1)
+    fila_inicio = 3,
+    col_inicio: str = "A",
+    col_fin: str = "C",
+    ajustar_filas: bool = False
 ) -> None:
     """
-    Limpia SOLO las columnas de entrada (A/B/C) desde fila_inicio hacia abajo.
-    Opcional: reduce filas de la tabla a 1 (sin tocar estilos/fórmulas).
+    Limpia las columnas de entrada (A, B, C) usando xlwings.
+    Opcionalmente, reduce las filas de la tabla a 1.
     """
-    pythoncom.CoInitialize()
-    xl = None
-    try:
-        xl = win32.DispatchEx("Excel.Application")
-        xl.Visible = False
-        xl.DisplayAlerts = False
-        # Evita que salten macros/eventos (error 424 por macros)
-        try: xl.EnableEvents = False
-        except: pass
-        try: xl.AskToUpdateLinks = False
-        except: pass
-        try: xl.AutomationSecurity = 3  # msoAutomationSecurityForceDisable
-        except: pass
+    # El bloque 'with' gestiona la apertura y cierre de Excel automáticamente
+    with xw.App(visible=False, add_book=False) as app:
+        app.display_alerts = False
+        app.enable_events = False
+        
+        wb = app.books.open(ruta_excel)
+        ws = wb.sheets[hoja]
 
-        wb = xl.Workbooks.Open(os.path.abspath(ruta_excel))
-        ws = wb.Worksheets(hoja)
-
-        last_row = fila_inicio  # por defecto
-
-        # Si existe la tabla, usamos su tamaño para limpiar
+        last_row = fila_inicio - 1
         tbl = None
+        
         try:
-            tbl = ws.ListObjects(nombre_tabla)
-            try:
-                existing = int(tbl.DataBodyRange.Rows.Count)
-            except Exception:
-                existing = 0
-            if existing > 0:
-                first_data_row = tbl.DataBodyRange.Row
-                last_row = first_data_row + existing - 1
-            else:
-                last_row = fila_inicio - 1
-        except Exception:
-            # Sin tabla: calculamos último usado en columna C (xlUp=-4162)
-            last_row = ws.Cells(ws.Rows.Count, col_unidades).End(-4162).Row
+            tbl = ws.tables[nombre_tabla]
+            # Si la tabla tiene cuerpo de datos, calcula la última fila
+            if tbl.data_body_range is not None:
+                existing_rows = tbl.data_body_range.rows.count
+                if existing_rows > 0:
+                    last_row = tbl.header_row_range.row + existing_rows
+        except KeyError:
+            # Si no hay tabla, busca la última fila usada en la columna C
+            last_row = ws.range(f'{col_fin}{ws.cells.last_cell.row}').end('up').row
 
+        # Limpia el contenido del rango en una sola operación
         if last_row >= fila_inicio:
-            ws.Range(f"{col_tienda}{fila_inicio}:{col_tienda}{last_row}").Value = ""
-            ws.Range(f"{col_referencia}{fila_inicio}:{col_referencia}{last_row}").Value = ""
-            ws.Range(f"{col_unidades}{fila_inicio}:{col_unidades}{last_row}").Value = ""
+            ws.range(f'{col_inicio}{fila_inicio}:{col_fin}{last_row}').clear_contents()
 
-        # Opcional: reducir filas de la tabla a 1 (para dejarla limpia)
-        if ajustar_filas and tbl is not None:
-            try:
-                existing = int(tbl.DataBodyRange.Rows.Count)
-            except Exception:
-                existing = 0
-            # deja 1 fila de datos como plantilla
-            for i in range(existing, 1, -1):
-                tbl.ListRows(i).Delete()
-
-        wb.Save()
-        wb.Close(SaveChanges=True)
-    finally:
-        if xl is not None:
-            xl.Quit()
-        pythoncom.CoUninitialize()
+        # Opcional: reducir filas de la tabla a 1
+        if ajustar_filas and tbl and tbl.data_body_range is not None:
+            existing_rows = tbl.data_body_range.rows.count
+            # Borra filas de abajo hacia arriba para evitar problemas de índice
+            while existing_rows > 1:
+                tbl.api.ListRows(existing_rows).Delete()
+                existing_rows -= 1
+        
+        wb.save()
+        wb.close()
 
 
-def exportar_directo_excel_com(
+def exportar_directo_excel_xlwings(
     ruta_excel: str,
     bytes_data: bytes,
     hoja: str = "Pedidos",
     nombre_tabla: str = "tblPedidos",
-    fila_inicio: int = 3,      # A3/B3/C3
-    col_tienda: str = "A",
-    col_referencia: str = "B",
-    col_unidades: str = "C",
-    columnas_df = ("Tienda", "Código", "Cantidad"),
-    modo: str = "sobrescribir"
+    celda_inicio: str = "A3",
+    columnas_df: tuple = ("Tienda", "Código", "Cantidad")
 ) -> None:
-
-    df = pd.read_excel(BytesIO(bytes_data)).copy()
-    for col in columnas_df:
-        if col not in df.columns:
-            raise ValueError(f"Falta la columna '{col}' en el DataFrame de entrada.")
-    n = len(df)
-    if n == 0:
+    """
+    Escribe datos de un DataFrame en un Excel usando xlwings.
+    Ajusta el tamaño de la tabla de destino para que coincida con los datos.
+    """
+    df = pd.read_excel(BytesIO(bytes_data))
+    if df.empty:
         return
-
-    vals_tienda     = [[v] for v in df[columnas_df[0]].tolist()]
-    vals_referencia = [[v] for v in df[columnas_df[1]].tolist()]
-    vals_unidades   = [[v] for v in df[columnas_df[2]].tolist()]
-
-    first_row = fila_inicio
-    last_row  = fila_inicio + n - 1
-
-    pythoncom.CoInitialize()
-    xl = None
+        
+    # Asegúrate de que las columnas existen y están en el orden correcto
     try:
-        xl = win32.DispatchEx("Excel.Application")
-        xl.Visible = False
-        xl.DisplayAlerts = False
-        try: xl.EnableEvents = False
-        except: pass
-        try: xl.AskToUpdateLinks = False
-        except: pass
-        try: xl.AutomationSecurity = 3
-        except: pass
+        df_to_write = df[list(columnas_df)]
+    except KeyError as e:
+        raise ValueError(f"Falta una columna requerida en el DataFrame: {e}")
 
-        wb = xl.Workbooks.Open(os.path.abspath(ruta_excel))
-        ws = wb.Worksheets(hoja)
+    n_nuevas_filas = len(df_to_write)
 
-        # ===== AJUSTE CRÍTICO: que la tabla tenga EXACTAMENTE n filas =====
-        tbl = None
+    with xw.App(visible=False, add_book=False) as app:
+        app.display_alerts = False
+        app.enable_events = False
+
+        wb = app.books.open(ruta_excel)
+        ws = wb.sheets[hoja]
+
+        # ===== AJUSTE DE LA TABLA (SI EXISTE) =====
         try:
-            tbl = ws.ListObjects(nombre_tabla)
-            try:
-                existing = int(tbl.DataBodyRange.Rows.Count)
-            except Exception:
-                existing = 0
+            tbl = ws.tables[nombre_tabla]
+            existing_rows = 0
+            if tbl.data_body_range is not None:
+                existing_rows = tbl.data_body_range.rows.count
 
-            if existing > n:
-                # Borra filas sobrantes empezando desde abajo
-                for i in range(existing, n, -1):
-                    tbl.ListRows(i).Delete()
-            elif existing < n:
-                for _ in range(n - existing):
-                    tbl.ListRows.Add()
-        except Exception:
-            tbl = None  # si no hay tabla, seguimos por rango
+            # Añade o borra filas para que coincida con el DataFrame
+            if existing_rows > n_nuevas_filas:
+                # Borra filas sobrantes (de abajo hacia arriba)
+                for i in range(existing_rows, n_nuevas_filas, -1):
+                    tbl.api.ListRows(i).Delete()
+            elif existing_rows < n_nuevas_filas:
+                # Añade las filas que faltan
+                for _ in range(n_nuevas_filas - existing_rows):
+                    tbl.api.ListRows.Add()
+        except KeyError:
+            # Si la tabla no existe, no hacemos nada y simplemente escribimos en el rango
+            pass
 
-        # ===== ESCRITURA POR CELDAS A3/B3/C3 =====
-        ws.Range(f"{col_tienda}{first_row}:{col_tienda}{last_row}").Value = vals_tienda
-        ws.Range(f"{col_referencia}{first_row}:{col_referencia}{last_row}").Value = vals_referencia
-        ws.Range(f"{col_unidades}{first_row}:{col_unidades}{last_row}").Value = vals_unidades
-
-        wb.Save()
-        wb.Close(SaveChanges=True)
-    finally:
-        if xl is not None:
-            xl.Quit()
-        pythoncom.CoUninitialize()
+        # ===== ESCRITURA DIRECTA Y EFICIENTE DEL DATAFRAME =====
+        # Escribe todo el DataFrame en una sola operación, sin índice ni cabecera
+        ws.range(celda_inicio).options(index=False, header=False).value = df_to_write
+        
+        wb.save()
+        wb.close()
 
 def subir_a_sharepoint(
     bytes_io: BytesIO,

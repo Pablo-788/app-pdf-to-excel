@@ -7,8 +7,8 @@ from datetime import datetime
 import pandas as pd
 from io import BytesIO
 from exportacion_plantilla import (
-    limpiar_entradas_com,
-    exportar_directo_excel_com,
+    limpiar_entradas_xlwings,
+    exportar_directo_excel_xlwings,
     subir_a_sharepoint
 )
 
@@ -336,26 +336,23 @@ def mostrar_aplicacion():
                     if not st.session_state.get("export_done"):
                         with st.spinner("Limpiando plantilla…"):
                             # Limpia A/B/C desde fila 3. Si quieres dejar sólo 1 fila en la tabla: ajustar_filas=True
-                            limpiar_entradas_com(
+                            limpiar_entradas_xlwings(
                                 RUTA_PLANTILLA,
                                 hoja="Pedidos",
                                 nombre_tabla="tblPedidos",
-                                fila_inicio=3,
-                                col_tienda="A", col_referencia="B", col_unidades="C",
+                                col_inicio="A",
+                                col_fin="C",
                                 ajustar_filas=True 
                             )
 
 
                         with st.spinner("Volcando datos en la plantilla local…"):
-                            exportar_directo_excel_com(
+                            exportar_directo_excel_xlwings(
                                 RUTA_PLANTILLA,
                                 bytes_data,
                                 hoja="Pedidos",
                                 nombre_tabla="tblPedidos",
-                                fila_inicio=3,
-                                col_tienda="A", col_referencia="B", col_unidades="C",
                                 columnas_df=("Tienda", "Código", "Cantidad"),
-                                modo="sobrescribir"
                             )
 
                         # Guarda bytes para reusar en descargas posteriores (sin re-escribir)
@@ -371,7 +368,7 @@ def mostrar_aplicacion():
                     if exito:
                         st.success("✅ Archivo subido correctamente a SharePoint")
                     else:
-                        st.error("❌ No se pudo subir el archivo a SharePoint")
+                        st.error("❌ No se pudo subir el archivo a SharePoint, 👀 ojo a no tener ese archivo abierto en SharePoint.")
 
                     # Descargar (sin re-escribir)
                     col6, col7, col8 = st.columns([1, 1, 1])
