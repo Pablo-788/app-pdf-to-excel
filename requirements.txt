@@ -4,4 +4,4 @@ pandas==2.3.2
 openpyxl==3.1.5
 msal==1.33.0
 python-dotenv==1.1.1
-pywin32==311
+xlwings==0.33.15
