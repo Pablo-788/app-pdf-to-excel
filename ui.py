@@ -5,11 +5,13 @@ from auth import iniciar_autenticacion, cerrar_sesion
 from extraer_tabla import procesar_pdf
 from datetime import datetime
 import pandas as pd
+import time
 from io import BytesIO
 from exportacion_plantilla import (
-    limpiar_entradas_xlwings,
-    exportar_directo_excel_xlwings,
-    subir_a_sharepoint
+    limpiar_entradas_mgraph,
+    escribir_datos_mgraph,
+    copy_file_on_sharepoint,
+    descargar_file_de_sharepoint
 )
 
 def init_state():
@@ -256,10 +258,11 @@ def mostrar_login():
     render_footer()
 
 def mostrar_aplicacion():
+    # Asume que estas funciones de estilo y estado ya están definidas en tu código
     inject_styles()
     init_state()
 
-    render_header()  
+    render_header() 
 
     st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
     pdf_file = st.file_uploader(
@@ -267,128 +270,126 @@ def mostrar_aplicacion():
         type=["pdf"],
         help="Sube un PDF que contenga tablas con productos y la etiqueta 'TIENDA'."
     )
-        # Después de leer pdf_file del uploader:
     if pdf_file is not None:
         pdf_key = f"{pdf_file.name}-{getattr(pdf_file, 'size', 0)}"
         if st.session_state.last_pdf_key != pdf_key:
             st.session_state.last_pdf_key = pdf_key
             st.session_state.export_done = False
-            st.session_state.excel_final_bytes = None
             st.session_state.uploaded_to_sharepoint = False
+            st.session_state.excel_final_bytes = None
+            st.session_state.final_file_name = None
+            # Reset state for a new file upload
+            st.session_state.process_started = False
+            st.session_state.download_ready = False
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # If download is ready, show the button and a success message, then stop.
+    if st.session_state.get('download_ready'):
+        st.success("🎉 ¡Proceso completado! El archivo se ha descargado exitosamente.")
+        st.info("Para iniciar un nuevo proceso, por favor, sube otro PDF.")
+        st.download_button(
+            label="⬇️ Descargar plantilla modificada",
+            data=st.session_state.excel_final_bytes,
+            file_name=st.session_state.final_file_name,
+            mime="application/vnd.ms-excel.sheet.macroEnabled.12",
+            key='final_download_button'
+        )
+        return
 
     if pdf_file is not None:
         with st.spinner("Extrayendo datos, dame unos segundos…"):
             try:
-                output_excel, nombre_archivo = procesar_pdf(pdf_file, pdf_file.name, st.session_state.access_token)
-
-                output_excel.seek(0)  # Asegurarse de que el puntero esté al inicio
-                bytes_data = output_excel.getvalue()  # guardamos el contenido en memoria
-                output_excel.close()    
-
-                st.success("✅ ¡PDF procesado!")
-
-                '''                
-                col6, col7, col8 = st.columns([1, 1, 1])
-                with col7:
-                    st.download_button(
-                        "📥 Descargar",
-                        data=bytes_data,
-                        file_name=nombre_archivo,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="primary"
-                    )
-                '''
-
+                output_excel, nombre_archivo_base = procesar_pdf(pdf_file, pdf_file.name, st.session_state.access_token)
+                output_excel.seek(0)
+                bytes_data = output_excel.getvalue()
+                output_excel.close()
+                st.success("✅ ¡PDF procesado y datos extraídos!")
             except Exception as e:
                 st.error("❌ Error al procesar el PDF.")
                 with st.expander("Detalles del error"):
                     st.code(str(e))
                 logging.exception(f"[{datetime.now()}] Error procesando archivo: {pdf_file.name}")
-
-                # Vista previa de la tabla contenida en el Excel
+            
             if 'bytes_data' in locals() and bytes_data:
                 try:
-                    df_preview = pd.read_excel(bytes_data)
+                    df_preview = pd.read_excel(BytesIO(bytes_data))
                     st.markdown('<div class="center-preview">', unsafe_allow_html=True)
                     st.markdown("#### 📋 Vista previa de los datos extraidos")
                     st.dataframe(df_preview, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)       
+                    st.markdown('</div>', unsafe_allow_html=True)     
                 except Exception as e:
                     st.warning("⚠️ No se pudo mostrar la vista previa de los datos.")
                     logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
-
 
             numero_usuario = st.text_input(
                 "Introduce un número de 6 dígitos para nombre de la plantilla de SaEGA",
                 max_chars=6
             )
 
-            # Validación del input
             if numero_usuario:
                 if not numero_usuario.isdigit() or len(numero_usuario) != 6:
                     st.warning("⚠️ Debes introducir exactamente 6 números.")
-                    numero_usuario = None  # invalidar para que no continue
+                    numero_usuario = None
 
             if 'bytes_data' in locals() and bytes_data and numero_usuario:
-                try:
-                    if not st.session_state.get("export_done"):
-                        with st.spinner("Limpiando plantilla…"):
-                            # Limpia A/B/C desde fila 3. Si quieres dejar sólo 1 fila en la tabla: ajustar_filas=True
-                            limpiar_entradas_xlwings(
-                                RUTA_PLANTILLA,
-                                hoja="Pedidos",
-                                nombre_tabla="tblPedidos",
-                                col_inicio="A",
-                                col_fin="C",
-                                ajustar_filas=True 
+                if st.button("🚀 Iniciar el proceso de actualización y descarga", type="primary"):
+                    st.session_state.process_started = True
+
+                if st.session_state.get('process_started'):
+                    # --- Bucle try-except principal para todo el proceso ---
+                    try:
+                        # IDs de SharePoint (asumo que son fijos)
+                        SHAREPOINT_DRIVE_ID = "b!u5eMfc6yEEyNixso-TGvPvlFaVzwwS9Kg8-2acKgkFgmw3vFAD1wS7AcibxLgDUS"
+                        SHAREPOINT_TEMPLATE_ITEM_ID = "01TGJYFESV66I2HZQYCZCIDYHYPLIT6HZQ"
+
+                        with st.spinner("Limpiando y escribiendo datos en la plantilla de SharePoint..."):
+                            limpiar_entradas_mgraph(
+                                access_token=st.session_state.access_token,
+                                drive_id=SHAREPOINT_DRIVE_ID,
+                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
+                                nombre_tabla="tblPedidos"
                             )
-
-
-                        with st.spinner("Volcando datos en la plantilla local…"):
-                            exportar_directo_excel_xlwings(
-                                RUTA_PLANTILLA,
-                                bytes_data,
-                                hoja="Pedidos",
-                                nombre_tabla="tblPedidos",
-                                columnas_df=("Tienda", "Código", "Cantidad"),
+                            escribir_datos_mgraph(
+                                access_token=st.session_state.access_token,
+                                drive_id=SHAREPOINT_DRIVE_ID,
+                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
+                                bytes_data=bytes_data
                             )
+                            copy_file_on_sharepoint(
+                                access_token=st.session_state.access_token,
+                                drive_id=SHAREPOINT_DRIVE_ID,
+                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
+                                new_file_name=f"{numero_usuario} - SaeGA.xlsm"
+                            )
+                            
+                            st.success("✅ Plantilla de SharePoint actualizada.")
+                        
+                        with st.spinner("Esperando que SharePoint sincronice los cambios..."):
+                            time.sleep(3) 
 
-                        # Guarda bytes para reusar en descargas posteriores (sin re-escribir)
-                        with open(RUTA_PLANTILLA, "rb") as f:
-                            st.session_state.excel_final_bytes = f.read()
-                        st.session_state.export_done = True
-
-                    plantilla_bytes = st.session_state.excel_final_bytes
-                    file_name_final = f"{numero_usuario} - SaeGA.xlsm"
-
-                    # Subir a SharePoint con los bytes ya guardados (no re-escribe)
-                    exito = subir_a_sharepoint(BytesIO(plantilla_bytes), file_name_final, st.session_state.access_token)
-                    if exito:
-                        st.success("✅ Archivo subido correctamente a SharePoint")
-                    else:
-                        st.error("❌ No se pudo subir el archivo a SharePoint, 👀 ojo a no tener ese archivo abierto en SharePoint.")
-
-                    # Descargar (sin re-escribir)
-                    col6, col7, col8 = st.columns([1, 1, 1])
-                    with col7:
-                        st.download_button(
-                            "📥 Descargar Plantilla de SaEGA",
-                            data=plantilla_bytes,
-                            file_name=file_name_final,
-                            mime="application/vnd.ms-excel.sheet.macroEnabled.12",
-                            type="primary",
-                            key=f"dl_{st.session_state.last_pdf_key}"  # evita colisiones de botón
-                        )
-
-                    st.info("Listo. Si subes otro PDF, se limpiará y volverá a volcar de cero.")
-
-                except Exception as e:
-                    st.error("❌ Error al escribir en la plantilla local.")
-                    with st.expander("Detalles del error"):
-                        st.code(str(e))
-                    logging.exception(f"[{datetime.now()}] Error en exportación plantilla in-place: {e}")
-
+                        with st.spinner("Descargando el archivo actualizado..."):
+                            downloaded_bytes = descargar_file_de_sharepoint(
+                                access_token=st.session_state.access_token,
+                                drive_id=SHAREPOINT_DRIVE_ID,
+                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID
+                            )
+                            
+                            if downloaded_bytes:
+                                st.session_state.excel_final_bytes = downloaded_bytes
+                                st.session_state.final_file_name = f"{numero_usuario} - SaeGA.xlsm"
+                                st.session_state.download_ready = True
+                                # Stop the process after a successful download
+                                st.session_state.process_started = False 
+                            else:
+                                st.session_state.download_ready = False
+                                st.error("❌ No se pudo descargar el archivo actualizado.")
+                        
+                    except Exception as e:
+                        st.error("❌ Ocurrió un error en el proceso.")
+                        with st.expander("Detalles del error"):
+                            st.code(str(e))
+                        st.session_state.process_started = False
+                        st.session_state.download_ready = False
 
     render_footer()
