@@ -258,18 +258,20 @@ def mostrar_login():
     render_footer()
 
 def mostrar_aplicacion():
-    # Asume que estas funciones de estilo y estado ya están definidas en tu código
     inject_styles()
     init_state()
-
-    render_header() 
+    render_header()
 
     st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
+
+    # Paso 1: Subida de PDF
     pdf_file = st.file_uploader(
-        "Selecciona un PDF de factura",
+        "📄 Selecciona un PDF de factura",
         type=["pdf"],
         help="Sube un PDF que contenga tablas con productos y la etiqueta 'TIENDA'."
     )
+
+    # Detectar cambio de PDF para resetear estado
     if pdf_file is not None:
         pdf_key = f"{pdf_file.name}-{getattr(pdf_file, 'size', 0)}"
         if st.session_state.last_pdf_key != pdf_key:
@@ -278,118 +280,104 @@ def mostrar_aplicacion():
             st.session_state.uploaded_to_sharepoint = False
             st.session_state.excel_final_bytes = None
             st.session_state.final_file_name = None
-            # Reset state for a new file upload
-            st.session_state.process_started = False
             st.session_state.download_ready = False
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # If download is ready, show the button and a success message, then stop.
+    # Si ya tenemos el archivo final generado, mostramos botón descarga
     if st.session_state.get('download_ready'):
-        st.success("🎉 ¡Proceso completado! El archivo se ha descargado exitosamente.")
-        st.info("Para iniciar un nuevo proceso, por favor, sube otro PDF.")
-        st.download_button(
-            label="⬇️ Descargar plantilla modificada",
-            data=st.session_state.excel_final_bytes,
-            file_name=st.session_state.final_file_name,
-            mime="application/vnd.ms-excel.sheet.macroEnabled.12",
-            key='final_download_button'
-        )
+        st.success("🎉 ¡Proceso completado correctamente!")
+        _, col_center, _ = st.columns([1, 2, 1])
+        with col_center:
+            st.download_button(
+                label="⬇️ Descargar plantilla modificada",
+                data=st.session_state.excel_final_bytes,
+                file_name=st.session_state.final_file_name,
+                mime="application/vnd.ms-excel.sheet.macroEnabled.12",
+                key='final_download_button'
+            )
+        st.info("Para procesar otro archivo, sube un nuevo PDF.")
         return
 
+    # Si hay PDF, procesamos
     if pdf_file is not None:
-        with st.spinner("Extrayendo datos, dame unos segundos…"):
+        with st.spinner("📥 Extrayendo datos del PDF…"):
             try:
-                output_excel, nombre_archivo_base = procesar_pdf(pdf_file, pdf_file.name, st.session_state.access_token)
+                output_excel, nombre_archivo_base = procesar_pdf(
+                    pdf_file, pdf_file.name, st.session_state.access_token
+                )
                 output_excel.seek(0)
                 bytes_data = output_excel.getvalue()
                 output_excel.close()
-                st.success("✅ ¡PDF procesado y datos extraídos!")
+                st.success("✅ Datos extraídos correctamente")
             except Exception as e:
                 st.error("❌ Error al procesar el PDF.")
                 with st.expander("Detalles del error"):
                     st.code(str(e))
                 logging.exception(f"[{datetime.now()}] Error procesando archivo: {pdf_file.name}")
-            
-            if 'bytes_data' in locals() and bytes_data:
+                return
+
+        # Vista previa
+        try:
+            df_preview = pd.read_excel(BytesIO(bytes_data))
+            st.markdown("#### 📋 Vista previa de los datos extraídos")
+            st.dataframe(df_preview, use_container_width=True)
+        except Exception as e:
+            st.warning("⚠️ No se pudo mostrar la vista previa.")
+            logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
+
+        # Paso 2: número de usuario
+        numero_usuario = st.text_input(
+            "Introduce un número de 6 dígitos para nombrar la plantilla de SaeGA",
+            max_chars=6
+        )
+
+        if numero_usuario and numero_usuario.isdigit() and len(numero_usuario) == 6:
+            with st.spinner("⚙️ Procesando datos en la plantilla de SharePoint…"):
                 try:
-                    df_preview = pd.read_excel(BytesIO(bytes_data))
-                    st.markdown('<div class="center-preview">', unsafe_allow_html=True)
-                    st.markdown("#### 📋 Vista previa de los datos extraidos")
-                    st.dataframe(df_preview, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)     
+                    SHAREPOINT_DRIVE_ID = "b!u5eMfc6yEEyNixso-TGvPvlFaVzwwS9Kg8-2acKgkFgmw3vFAD1wS7AcibxLgDUS"
+                    SHAREPOINT_TEMPLATE_ITEM_ID = "01TGJYFESV66I2HZQYCZCIDYHYPLIT6HZQ"
+
+                    limpiar_entradas_mgraph(
+                        access_token=st.session_state.access_token,
+                        drive_id=SHAREPOINT_DRIVE_ID,
+                        item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
+                        nombre_tabla="tblPedidos"
+                    )
+                    escribir_datos_mgraph(
+                        access_token=st.session_state.access_token,
+                        drive_id=SHAREPOINT_DRIVE_ID,
+                        item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
+                        bytes_data=bytes_data
+                    )
+                    copy_file_on_sharepoint(
+                        access_token=st.session_state.access_token,
+                        drive_id=SHAREPOINT_DRIVE_ID,
+                        item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
+                        new_file_name=f"{numero_usuario} - SaeGA.xlsm"
+                    )
+
+                    time.sleep(3)  # Espera para que SharePoint sincronice
+
+                    downloaded_bytes = descargar_file_de_sharepoint(
+                        access_token=st.session_state.access_token,
+                        drive_id=SHAREPOINT_DRIVE_ID,
+                        item_id=SHAREPOINT_TEMPLATE_ITEM_ID
+                    )
+
+                    if downloaded_bytes:
+                        st.session_state.excel_final_bytes = downloaded_bytes
+                        st.session_state.final_file_name = f"{numero_usuario} - SaeGA.xlsm"
+                        st.session_state.download_ready = True
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo descargar el archivo actualizado.")
                 except Exception as e:
-                    st.warning("⚠️ No se pudo mostrar la vista previa de los datos.")
-                    logging.exception(f"[{datetime.now()}] Error mostrando vista previa: {e}")
+                    st.error("❌ Ocurrió un error en el proceso.")
+                    with st.expander("Detalles del error"):
+                        st.code(str(e))
 
-            numero_usuario = st.text_input(
-                "Introduce un número de 6 dígitos para nombre de la plantilla de SaEGA",
-                max_chars=6
-            )
-
-            if numero_usuario:
-                if not numero_usuario.isdigit() or len(numero_usuario) != 6:
-                    st.warning("⚠️ Debes introducir exactamente 6 números.")
-                    numero_usuario = None
-
-            if 'bytes_data' in locals() and bytes_data and numero_usuario:
-                if st.button("🚀 Iniciar el proceso de actualización y descarga", type="primary"):
-                    st.session_state.process_started = True
-
-                if st.session_state.get('process_started'):
-                    # --- Bucle try-except principal para todo el proceso ---
-                    try:
-                        # IDs de SharePoint (asumo que son fijos)
-                        SHAREPOINT_DRIVE_ID = "b!u5eMfc6yEEyNixso-TGvPvlFaVzwwS9Kg8-2acKgkFgmw3vFAD1wS7AcibxLgDUS"
-                        SHAREPOINT_TEMPLATE_ITEM_ID = "01TGJYFESV66I2HZQYCZCIDYHYPLIT6HZQ"
-
-                        with st.spinner("Limpiando y escribiendo datos en la plantilla de SharePoint..."):
-                            limpiar_entradas_mgraph(
-                                access_token=st.session_state.access_token,
-                                drive_id=SHAREPOINT_DRIVE_ID,
-                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
-                                nombre_tabla="tblPedidos"
-                            )
-                            escribir_datos_mgraph(
-                                access_token=st.session_state.access_token,
-                                drive_id=SHAREPOINT_DRIVE_ID,
-                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
-                                bytes_data=bytes_data
-                            )
-                            copy_file_on_sharepoint(
-                                access_token=st.session_state.access_token,
-                                drive_id=SHAREPOINT_DRIVE_ID,
-                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID,
-                                new_file_name=f"{numero_usuario} - SaeGA.xlsm"
-                            )
-                            
-                            st.success("✅ Plantilla de SharePoint actualizada.")
-                        
-                        with st.spinner("Esperando que SharePoint sincronice los cambios..."):
-                            time.sleep(3) 
-
-                        with st.spinner("Descargando el archivo actualizado..."):
-                            downloaded_bytes = descargar_file_de_sharepoint(
-                                access_token=st.session_state.access_token,
-                                drive_id=SHAREPOINT_DRIVE_ID,
-                                item_id=SHAREPOINT_TEMPLATE_ITEM_ID
-                            )
-                            
-                            if downloaded_bytes:
-                                st.session_state.excel_final_bytes = downloaded_bytes
-                                st.session_state.final_file_name = f"{numero_usuario} - SaeGA.xlsm"
-                                st.session_state.download_ready = True
-                                # Stop the process after a successful download
-                                st.session_state.process_started = False 
-                            else:
-                                st.session_state.download_ready = False
-                                st.error("❌ No se pudo descargar el archivo actualizado.")
-                        
-                    except Exception as e:
-                        st.error("❌ Ocurrió un error en el proceso.")
-                        with st.expander("Detalles del error"):
-                            st.code(str(e))
-                        st.session_state.process_started = False
-                        st.session_state.download_ready = False
+        elif numero_usuario:
+            st.warning("⚠️ Debes introducir exactamente 6 números.")
 
     render_footer()

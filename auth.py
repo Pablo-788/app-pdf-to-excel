@@ -9,7 +9,7 @@ load_dotenv()
 CLIENT_ID  = os.getenv("CLIENT_ID")
 TENANT_ID  = os.getenv("TENANT_ID")
 AUTHORITY    = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "http://localhost:8501/"  # Cambia esto si usas otro puerto
+REDIRECT_URI = "https://pedidos-et-saetech-iu00.onrender.com/"  # Cambia esto si usas otro puerto
 SCOPES       =  [
     "User.Read",          # Perfil básico del usuario
     "Files.Read",         # Leer archivos del usuario en OneDrive y SharePoint
